@@ -50,29 +50,138 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Session store configuration
+const sessionStore = new pgSession({
+  pool: pool,
+  tableName: 'session',
+  createTableIfMissing: false,
+});
+
 // Session configuration
-app.use(
-  session({
-    store: new pgSession({
-      pool: pool,
-      tableName: 'session', // Use default table name 'session'
-      createTableIfMissing: false, // Don't auto-create, we'll create it manually with proper constraints
-    }),
-    name: 'connect.sid', // Session cookie name
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-    resave: false, // Don't save session if unmodified
-    saveUninitialized: false, // Don't create session until something is stored
-    rolling: false, // Don't reset expiration on every request
-    cookie: {
-      secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
-      httpOnly: true, // Prevent XSS attacks
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-origin in production (requires secure: true)
-      // Don't set domain - let browser handle it
-      // path: '/' is default
-    },
-  })
-);
+const sessionConfig = {
+  store: sessionStore,
+  name: 'connect.sid',
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false, // CRITICAL: Set to false so uninitialized sessions don't get cookies
+  rolling: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+  },
+};
+
+app.use(session(sessionConfig));
+
+// Middleware to ensure session cookie is set and debug session issues
+app.use((req, res, next) => {
+  // Store original methods
+  const originalJson = res.json.bind(res);
+  const originalEnd = res.end.bind(res);
+  
+  // Debug: Log session state on every request
+  if (req.path.startsWith('/api/auth')) {
+    console.log('[Session Middleware] Request received:', {
+      path: req.path,
+      method: req.method,
+      hasSession: !!req.session,
+      sessionID: req.sessionID,
+      hasPassport: req.session?.passport ? 'yes' : 'no',
+      hasUserId: req.session?.userId ? 'yes' : 'no',
+      isAuthenticated: req.isAuthenticated?.() || false,
+      cookieHeader: req.headers.cookie ? req.headers.cookie.substring(0, 30) + '...' : 'none'
+    });
+  }
+  
+  // Override res.json to ensure session cookie is set
+  res.json = function(body) {
+    // If session exists, ensure it's saved and cookie is set
+    if (req.session && req.sessionID) {
+      // Force session save to trigger cookie setting
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Session Middleware] Error saving session:', {
+            error: err.message,
+            sessionId: req.sessionID,
+            path: req.path
+          });
+        } else {
+          const setCookie = res.getHeader('Set-Cookie');
+          console.log('[Session Middleware] Session saved in res.json:', {
+            sessionId: req.sessionID,
+            hasSetCookie: !!setCookie,
+            setCookie: setCookie,
+            path: req.path,
+            sessionData: {
+              hasPassport: !!req.session.passport,
+              hasUserId: !!req.session.userId,
+              cookie: req.session.cookie
+            }
+          });
+          
+          // If still no cookie after save, manually set it as fallback
+          if (!setCookie && req.sessionID) {
+            console.warn('[Session Middleware] No Set-Cookie header after save, manually setting');
+            
+            // Create signed cookie value (connect-pg-simple format)
+            const crypto = require('crypto');
+            const secret = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
+            const signature = crypto
+              .createHmac('sha256', secret)
+              .update(req.sessionID)
+              .digest('base64')
+              .replace(/=+$/, '');
+            
+            const cookieValue = `s:${req.sessionID}.${signature}`;
+            const maxAge = Math.floor(req.session.cookie.maxAge / 1000);
+            const sameSite = req.session.cookie.sameSite;
+            const secure = req.session.cookie.secure;
+            
+            const cookieString = `connect.sid=${cookieValue}; Path=/; Max-Age=${maxAge}; HttpOnly; ${secure ? 'Secure; ' : ''}SameSite=${sameSite}`;
+            
+            res.setHeader('Set-Cookie', cookieString);
+            console.log('[Session Middleware] Manually set cookie:', cookieString.substring(0, 80) + '...');
+          }
+        }
+        
+        // Send response after session is saved
+        originalJson(body);
+      });
+      
+      // Return early to prevent double response
+      return res;
+    }
+    
+    // No session, send response normally
+    return originalJson(body);
+  };
+  
+  // Override res.end for non-JSON responses
+  res.end = function(...args) {
+    if (req.session && req.sessionID) {
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Session Middleware] Error saving session in res.end:', err);
+        } else {
+          const setCookie = res.getHeader('Set-Cookie');
+          console.log('[Session Middleware] Session saved in res.end:', {
+            sessionId: req.sessionID,
+            hasSetCookie: !!setCookie,
+            path: req.path
+          });
+        }
+        originalEnd.apply(this, args);
+      });
+    } else {
+      originalEnd.apply(this, args);
+    }
+  };
+  
+  next();
+});
 
 // Initialize Passport
 app.use(passport.initialize());
