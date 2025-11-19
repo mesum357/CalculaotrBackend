@@ -7,6 +7,13 @@ const pool = require('../config/database');
 // Register (Sign Up)
 router.post('/register', async (req, res) => {
   try {
+    console.log('[Auth] Registration request received:', {
+      email: req.body?.email,
+      hasPassword: !!req.body?.password,
+      hasName: !!req.body?.name,
+      timestamp: new Date().toISOString()
+    });
+    
     const { email, password, name } = req.body;
 
     // Validation
@@ -21,6 +28,7 @@ router.post('/register', async (req, res) => {
     // Check if user already exists
     const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existingUser.rows.length > 0) {
+      console.log('[Auth] Registration failed - user already exists:', { email });
       return res.status(400).json({ error: 'User with this email already exists' });
     }
 
@@ -35,37 +43,129 @@ router.post('/register', async (req, res) => {
     );
 
     const user = result.rows[0];
+    
+    console.log('[Auth] User created successfully, attempting to create session:', {
+      userId: user.id,
+      email: user.email,
+      sessionId: req.sessionID
+    });
 
     // Automatically log in the user after registration
     req.login(user, (err) => {
       if (err) {
-        return res.status(500).json({ error: 'Failed to log in after registration' });
+        console.error('[Auth] Failed to create session after registration:', {
+          error: err.message,
+          stack: err.stack,
+          code: err.code,
+          userId: user.id
+        });
+        
+        // Check if it's a database/session table issue
+        if (err.code === '42P01' || err.message.includes('relation') || err.message.includes('session')) {
+          return res.status(500).json({ 
+            error: 'Failed to log in after registration',
+            details: 'Session table may not exist. Please check database initialization.',
+            hint: 'Run: backend/database/schema.sql'
+          });
+        }
+        
+        return res.status(500).json({ 
+          error: 'Failed to log in after registration',
+          details: err.message,
+          code: err.code
+        });
       }
+      
+      console.log('[Auth] Registration and session creation successful:', {
+        userId: user.id,
+        email: user.email,
+        sessionId: req.sessionID
+      });
+      
       return res.status(201).json({ 
         message: 'User registered successfully',
         user: { id: user.id, email: user.email, name: user.name }
       });
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to register user' });
+    console.error('[Auth] Registration error:', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code
+    });
+    res.status(500).json({ 
+      error: 'Failed to register user',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
 // Login
 router.post('/login', (req, res, next) => {
+  console.log('[Auth] Login request received:', {
+    email: req.body?.email,
+    hasPassword: !!req.body?.password,
+    sessionId: req.sessionID,
+    timestamp: new Date().toISOString()
+  });
+  
   passport.authenticate('local', (err, user, info) => {
     if (err) {
-      return res.status(500).json({ error: 'Authentication error' });
+      console.error('[Auth] Authentication error:', {
+        error: err.message,
+        stack: err.stack,
+        code: err.code
+      });
+      return res.status(500).json({ error: 'Authentication error', details: err.message });
     }
     if (!user) {
-      return res.status(401).json({ error: info.message || 'Invalid credentials' });
+      console.log('[Auth] Authentication failed:', {
+        info: info?.message,
+        email: req.body?.email
+      });
+      return res.status(401).json({ error: info?.message || 'Invalid credentials' });
     }
+    
+    console.log('[Auth] Authentication successful, creating session for user:', {
+      userId: user.id,
+      email: user.email,
+      sessionId: req.sessionID
+    });
     
     req.login(user, (err) => {
       if (err) {
-        return res.status(500).json({ error: 'Failed to create session' });
+        console.error('[Auth] Failed to create session:', {
+          error: err.message,
+          stack: err.stack,
+          code: err.code,
+          userId: user.id,
+          sessionId: req.sessionID
+        });
+        
+        // Check if it's a database/session table issue
+        if (err.code === '42P01' || err.message.includes('relation') || err.message.includes('session')) {
+          return res.status(500).json({ 
+            error: 'Failed to create session', 
+            details: 'Session table may not exist. Please check database initialization.',
+            hint: 'Run: backend/database/schema.sql'
+          });
+        }
+        
+        return res.status(500).json({ 
+          error: 'Failed to create session',
+          details: err.message,
+          code: err.code
+        });
       }
+      
+      console.log('[Auth] Session created successfully:', {
+        userId: user.id,
+        email: user.email,
+        sessionId: req.sessionID,
+        isAuthenticated: req.isAuthenticated()
+      });
+      
       return res.json({ 
         message: 'Login successful',
         user: { id: user.id, email: user.email, name: user.name }

@@ -10,24 +10,36 @@ async function initializeDatabase() {
   try {
     console.log('🔍 Checking database schema...');
     
-    // Check if all essential tables exist (categories, calculators, users)
+    // Check if all essential tables exist (categories, calculators, users, session)
     const tablesCheck = await pool.query(`
       SELECT 
         EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'categories') as has_categories,
         EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'calculators') as has_calculators,
-        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') as has_users;
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') as has_users,
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'session') as has_session;
     `);
     
-    const { has_categories, has_calculators, has_users } = tablesCheck.rows[0];
-    const allTablesExist = has_categories && has_calculators && has_users;
+    const { has_categories, has_calculators, has_users, has_session } = tablesCheck.rows[0];
+    const allTablesExist = has_categories && has_calculators && has_users && has_session;
     
     if (allTablesExist) {
-      console.log('✓ Database tables already exist');
+      console.log('✓ Database tables already exist (categories, calculators, users, session)');
       return true;
     }
     
+    console.log('⚠️  Missing tables detected:', {
+      has_categories,
+      has_calculators,
+      has_users,
+      has_session
+    });
+    
+    if (!has_session) {
+      console.log('⚠️  Missing session table! This will cause login failures.');
+    }
+    
     if (has_categories && has_calculators && !has_users) {
-      console.log('⚠️  Missing some tables (users). Running schema to create missing tables...');
+      console.log('⚠️  Missing some tables (users, session). Running schema to create missing tables...');
     } else if (!has_categories || !has_calculators) {
       console.log('⚠️  Database tables not found. Initializing schema...');
     }
