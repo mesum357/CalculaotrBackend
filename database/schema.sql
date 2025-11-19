@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS calculators (
     description TEXT,
     href VARCHAR(500),
     is_active BOOLEAN DEFAULT true,
+    inputs JSONB DEFAULT '[]'::jsonb,
+    results JSONB DEFAULT '[]'::jsonb,
+    tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+    most_used BOOLEAN DEFAULT false,
+    likes INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(category_id, subcategory_id, slug)
@@ -44,6 +49,8 @@ CREATE INDEX IF NOT EXISTS idx_subcategories_category_id ON subcategories(catego
 CREATE INDEX IF NOT EXISTS idx_calculators_category_id ON calculators(category_id);
 CREATE INDEX IF NOT EXISTS idx_calculators_subcategory_id ON calculators(subcategory_id);
 CREATE INDEX IF NOT EXISTS idx_calculators_slug ON calculators(slug);
+CREATE INDEX IF NOT EXISTS idx_calculators_most_used ON calculators(most_used);
+CREATE INDEX IF NOT EXISTS idx_calculators_is_active ON calculators(is_active);
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 CREATE INDEX IF NOT EXISTS idx_subcategories_slug ON subcategories(slug);
 

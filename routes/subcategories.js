@@ -20,7 +20,37 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching subcategories:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error details:', error.message, error.code);
+    
+    if (error.code === 'ECONNREFUSED') {
+      return res.status(503).json({ 
+        error: 'Database connection failed',
+        message: 'Cannot connect to PostgreSQL database',
+        hint: 'Make sure PostgreSQL is running. On Windows, start the PostgreSQL service from Services (services.msc)'
+      });
+    }
+    
+    if (error.code === '28P01') {
+      return res.status(503).json({ 
+        error: 'Database authentication failed',
+        message: 'Password authentication failed for user "postgres"',
+        hint: 'Check your DB_PASSWORD in the .env file. It must match your PostgreSQL password. Create backend/.env with: DB_PASSWORD=your_password'
+      });
+    }
+    
+    if (error.code === '3D000') {
+      return res.status(503).json({ 
+        error: 'Database does not exist',
+        message: 'Database "calculator_db" does not exist',
+        hint: 'Run: npm run setup-db (in the backend directory) to create the database and tables'
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message,
+      code: error.code
+    });
   }
 });
 

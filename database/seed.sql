@@ -8,13 +8,28 @@ INSERT INTO categories (name, slug, icon, description) VALUES
 ('Physics', 'physics', 'Atom', 'Physics calculators for scientific computations'),
 ('Chemistry', 'chemistry', 'FlaskConical', 'Chemistry calculators for chemical calculations'),
 ('Engineering', 'engineering', 'Cog', 'Engineering calculators for technical computations'),
+('Biology', 'biology', 'Leaf', 'Biology calculators'),
 ('Health & Fitness', 'health', 'HeartPulse', 'Health and fitness calculators'),
+('Health', 'health-care', 'Activity', 'Health and medical calculators'),
+('Food & Nutrition', 'food', 'UtensilsCrossed', 'Food and nutrition calculators'),
+('Ecology', 'ecology', 'Leaf', 'Ecology and environmental calculators'),
 ('Conversion', 'conversion', 'ArrowRightLeft', 'Unit conversion calculators'),
 ('Construction', 'construction', 'Construction', 'Construction and building calculators'),
 ('Everyday Life', 'everyday', 'Scale', 'Everyday life calculators'),
 ('Computer Science', 'cs', 'CodeXml', 'Computer science calculators'),
 ('Statistics', 'statistics', 'BarChart3', 'Statistical calculators'),
-('Automotive', 'automotive', 'Car', 'Automotive calculators')
+('Automotive', 'automotive', 'Car', 'Automotive calculators'),
+('Education', 'education', 'GraduationCap', 'Educational calculators'),
+('Sports', 'sports', 'Trophy', 'Sports and fitness calculators'),
+('Travel', 'travel', 'Plane', 'Travel and distance calculators'),
+('Real Estate', 'real-estate', 'Home', 'Real estate and property calculators'),
+('Business', 'business', 'Briefcase', 'Business and commerce calculators'),
+('Science', 'science', 'Microscope', 'General science calculators'),
+('Weather', 'weather', 'Cloud', 'Weather and climate calculators'),
+('Time', 'time', 'Clock', 'Time and date calculators'),
+('Text', 'text', 'Type', 'Text and string calculators'),
+('Image', 'image', 'Image', 'Image and graphics calculators'),
+('Color', 'color', 'Palette', 'Color calculators and converters')
 ON CONFLICT (slug) DO NOTHING;
 
 -- Insert subcategories for Math
