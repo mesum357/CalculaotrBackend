@@ -6,6 +6,7 @@ const passport = require('./config/passport');
 require('dotenv').config();
 
 const pool = require('./config/database');
+const { initializeDatabase } = require('./database/init');
 const categoriesRouter = require('./routes/categories');
 const subcategoriesRouter = require('./routes/subcategories');
 const calculatorsRouter = require('./routes/calculators');
@@ -117,7 +118,15 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-  console.log(`API endpoints available at http://localhost:${port}/api`);
-});
+// Initialize database and start server
+async function startServer() {
+  // Initialize database schema if needed (non-blocking)
+  await initializeDatabase();
+  
+  app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
+    console.log(`API endpoints available at http://localhost:${port}/api`);
+  });
+}
+
+startServer();

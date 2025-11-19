@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS calculators (
     results JSONB DEFAULT '[]'::jsonb,
     tags TEXT[] DEFAULT ARRAY[]::TEXT[],
     most_used BOOLEAN DEFAULT false,
+    popular BOOLEAN DEFAULT false,
     likes INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -50,6 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_calculators_category_id ON calculators(category_i
 CREATE INDEX IF NOT EXISTS idx_calculators_subcategory_id ON calculators(subcategory_id);
 CREATE INDEX IF NOT EXISTS idx_calculators_slug ON calculators(slug);
 CREATE INDEX IF NOT EXISTS idx_calculators_most_used ON calculators(most_used);
+CREATE INDEX IF NOT EXISTS idx_calculators_popular ON calculators(popular);
 CREATE INDEX IF NOT EXISTS idx_calculators_is_active ON calculators(is_active);
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 CREATE INDEX IF NOT EXISTS idx_subcategories_slug ON subcategories(slug);
