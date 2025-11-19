@@ -18,9 +18,15 @@ const port = process.env.PORT || 3001;
 // CORS configuration - allow credentials for session cookies
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:9002',
-  'http://localhost:8080', // Admin panel
-  'http://localhost:3000', // Next.js frontend (if different)
-];
+  process.env.NEXTJS_FRONTEND_URL || 'http://localhost:9002',
+  process.env.ADMIN_PANEL_URL || 'http://localhost:8080',
+  'http://localhost:8080', // Admin panel (local)
+  'http://localhost:3000', // Next.js frontend (local, if different)
+  'http://localhost:9002', // Next.js frontend (local)
+  // Production URLs - Add your Render frontend URLs here
+  'https://nextjs-app.onrender.com',
+  'https://admin-panel.onrender.com', // If you deploy admin panel
+].filter(Boolean); // Remove undefined values
 
 app.use(cors({
   origin: function (origin, callback) {

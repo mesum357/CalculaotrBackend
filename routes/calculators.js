@@ -54,15 +54,21 @@ router.get('/', async (req, res) => {
     let paramCount = 0;
     
     if (category_id) {
-      paramCount++;
-      query += ` AND calc.category_id = $${paramCount}`;
-      params.push(category_id);
+      const parsedCategoryId = parseInt(category_id, 10);
+      if (!isNaN(parsedCategoryId)) {
+        paramCount++;
+        query += ` AND calc.category_id = $${paramCount}`;
+        params.push(parsedCategoryId);
+      }
     }
     
     if (subcategory_id) {
-      paramCount++;
-      query += ` AND calc.subcategory_id = $${paramCount}`;
-      params.push(subcategory_id);
+      const parsedSubcategoryId = parseInt(subcategory_id, 10);
+      if (!isNaN(parsedSubcategoryId)) {
+        paramCount++;
+        query += ` AND calc.subcategory_id = $${paramCount}`;
+        params.push(parsedSubcategoryId);
+      }
     }
     
     if (is_active !== undefined) {
@@ -201,15 +207,21 @@ router.get('/slug/:slug', async (req, res) => {
     let paramCount = 1;
     
     if (category_id) {
-      paramCount++;
-      query += ` AND calc.category_id = $${paramCount}`;
-      params.push(category_id);
+      const parsedCategoryId = parseInt(category_id, 10);
+      if (!isNaN(parsedCategoryId)) {
+        paramCount++;
+        query += ` AND calc.category_id = $${paramCount}`;
+        params.push(parsedCategoryId);
+      }
     }
     
     if (subcategory_id) {
-      paramCount++;
-      query += ` AND calc.subcategory_id = $${paramCount}`;
-      params.push(subcategory_id);
+      const parsedSubcategoryId = parseInt(subcategory_id, 10);
+      if (!isNaN(parsedSubcategoryId)) {
+        paramCount++;
+        query += ` AND calc.subcategory_id = $${paramCount}`;
+        params.push(parsedSubcategoryId);
+      }
     }
     
     const result = await pool.query(query, params);
@@ -247,10 +259,22 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Category ID, subcategory ID, name, and slug are required' });
     }
     
+    // Parse and validate category_id and subcategory_id as integers
+    const parsedCategoryId = parseInt(category_id, 10);
+    const parsedSubcategoryId = parseInt(subcategory_id, 10);
+    
+    if (isNaN(parsedCategoryId)) {
+      return res.status(400).json({ error: 'Category ID must be a valid integer' });
+    }
+    
+    if (isNaN(parsedSubcategoryId)) {
+      return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
+    }
+    
     // Verify category exists
     const categoryCheck = await pool.query(
       'SELECT id FROM categories WHERE id = $1',
-      [category_id]
+      [parsedCategoryId]
     );
     
     if (categoryCheck.rows.length === 0) {
@@ -260,7 +284,7 @@ router.post('/', async (req, res) => {
     // Verify subcategory exists and belongs to category
     const subcategoryCheck = await pool.query(
       'SELECT id FROM subcategories WHERE id = $1 AND category_id = $2',
-      [subcategory_id, category_id]
+      [parsedSubcategoryId, parsedCategoryId]
     );
     
     if (subcategoryCheck.rows.length === 0) {
@@ -288,8 +312,8 @@ router.post('/', async (req, res) => {
     let insertColumns = `category_id, subcategory_id, name, slug, description, href, is_active`;
     let insertValues = `$1, $2, $3, $4, $5, $6, $7`;
     const params = [
-      category_id, 
-      subcategory_id, 
+      parsedCategoryId, 
+      parsedSubcategoryId, 
       name, 
       slug, 
       description || null, 
@@ -356,6 +380,18 @@ router.put('/:id', async (req, res) => {
       popular
     } = req.body;
     
+    // Parse and validate category_id and subcategory_id as integers
+    const parsedCategoryId = parseInt(category_id, 10);
+    const parsedSubcategoryId = parseInt(subcategory_id, 10);
+    
+    if (isNaN(parsedCategoryId)) {
+      return res.status(400).json({ error: 'Category ID must be a valid integer' });
+    }
+    
+    if (isNaN(parsedSubcategoryId)) {
+      return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
+    }
+    
     // Check if new columns exist
     let hasNewColumns = false;
     let hasPopular = false;
@@ -383,8 +419,8 @@ router.put('/:id', async (req, res) => {
         href = $6, 
         is_active = $7`;
     const params = [
-      category_id, 
-      subcategory_id, 
+      parsedCategoryId, 
+      parsedSubcategoryId, 
       name, 
       slug, 
       description, 

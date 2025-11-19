@@ -10,6 +10,10 @@ const pool = new Pool({
   // Add connection timeout and retry logic
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 30000,
+  // SSL configuration for production (Render requires SSL)
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : false,
 });
 
 // Test database connection on startup
