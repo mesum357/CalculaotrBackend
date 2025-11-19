@@ -93,6 +93,8 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Session table for express-session with connect-pg-simple
+-- CRITICAL: This table MUST have a primary key constraint for connect-pg-simple's ON CONFLICT to work
+-- Create table if it doesn't exist
 CREATE TABLE IF NOT EXISTS "session" (
   "sid" varchar NOT NULL COLLATE "default",
   "sess" json NOT NULL,
@@ -100,17 +102,11 @@ CREATE TABLE IF NOT EXISTS "session" (
 )
 WITH (OIDS=FALSE);
 
--- Add primary key constraint if it doesn't exist
-DO $$ 
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'session_pkey' AND conrelid = 'session'::regclass
-    ) THEN
-        ALTER TABLE "session" ADD CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE;
-    END IF;
-END $$;
+-- Drop and recreate primary key constraint to ensure it's correct (connect-pg-simple needs this)
+ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_pkey";
+ALTER TABLE "session" ADD CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE;
 
+-- Create index for expire column
 CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
 
 -- Calculator interactions tables (likes, ratings, comments)
@@ -177,4 +173,5 @@ CREATE TRIGGER update_ratings_updated_at BEFORE UPDATE ON calculator_ratings
 
 CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON calculator_comments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 

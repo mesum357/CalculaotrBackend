@@ -54,7 +54,7 @@ app.use(
     store: new pgSession({
       pool: pool,
       tableName: 'session', // Use default table name 'session'
-      createTableIfMissing: true, // Automatically create table if it doesn't exist
+      createTableIfMissing: false, // Don't auto-create, we'll create it manually with proper constraints
     }),
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
     resave: false,
