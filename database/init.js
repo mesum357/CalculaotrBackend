@@ -10,20 +10,26 @@ async function initializeDatabase() {
   try {
     console.log('🔍 Checking database schema...');
     
-    // Check if categories table exists
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'categories'
-      );
+    // Check if all essential tables exist (categories, calculators, users)
+    const tablesCheck = await pool.query(`
+      SELECT 
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'categories') as has_categories,
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'calculators') as has_calculators,
+        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') as has_users;
     `);
     
-    const tablesExist = tableCheck.rows[0].exists;
+    const { has_categories, has_calculators, has_users } = tablesCheck.rows[0];
+    const allTablesExist = has_categories && has_calculators && has_users;
     
-    if (tablesExist) {
+    if (allTablesExist) {
       console.log('✓ Database tables already exist');
       return true;
+    }
+    
+    if (has_categories && has_calculators && !has_users) {
+      console.log('⚠️  Missing some tables (users). Running schema to create missing tables...');
+    } else if (!has_categories || !has_calculators) {
+      console.log('⚠️  Database tables not found. Initializing schema...');
     }
     
     console.log('⚠️  Database tables not found. Initializing schema...');
