@@ -123,6 +123,15 @@ async function startServer() {
   // Initialize database schema if needed (non-blocking)
   await initializeDatabase();
   
+  // CRITICAL: Fix session table constraint if needed (for login to work)
+  const { fixSessionConstraint } = require('./database/fix_session_constraint');
+  try {
+    await fixSessionConstraint();
+  } catch (error) {
+    console.warn('⚠️  Could not verify session table constraint:', error.message);
+    console.warn('   Login may fail. Run: node backend/database/fix_session_constraint.js');
+  }
+  
   app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
     console.log(`API endpoints available at http://localhost:${port}/api`);

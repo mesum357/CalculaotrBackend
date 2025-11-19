@@ -105,6 +105,59 @@ async function initializeDatabase() {
         }
       }
       
+      // CRITICAL: Ensure session table has primary key constraint
+      // This fixes the "ON CONFLICT" error for connect-pg-simple
+      try {
+        console.log('   Checking session table constraint...');
+        
+        // Check if session table exists
+        const sessionTableCheck = await client.query(`
+          SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' AND table_name = 'session'
+          );
+        `);
+        
+        if (sessionTableCheck.rows[0].exists) {
+          // Check if primary key constraint exists
+          const constraintCheck = await client.query(`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_constraint 
+              WHERE conname = 'session_pkey' 
+              AND conrelid = 'session'::regclass
+              AND contype = 'p'
+            );
+          `);
+          
+          const hasConstraint = constraintCheck.rows[0].exists;
+          
+          if (!hasConstraint) {
+            console.log('   ⚠️  Session table exists but missing primary key constraint. Fixing...');
+            
+            // Drop existing constraint if it exists (in case it's broken)
+            await client.query('ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_pkey"');
+            
+            // Add primary key constraint
+            await client.query(`
+              ALTER TABLE "session" 
+              ADD CONSTRAINT "session_pkey" 
+              PRIMARY KEY ("sid") 
+              NOT DEFERRABLE INITIALLY IMMEDIATE
+            `);
+            
+            console.log('   ✓ Session table primary key constraint added');
+          } else {
+            console.log('   ✓ Session table has primary key constraint');
+          }
+          
+          // Ensure index exists
+          await client.query('CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")');
+        }
+      } catch (err) {
+        console.warn('   Warning: Could not verify/fix session table constraint:', err.message);
+        // Don't fail initialization if this fails, but log it
+      }
+      
       console.log('✓ Database schema initialized successfully');
       return true;
       

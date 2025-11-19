@@ -13,7 +13,8 @@
     "run-migration": "node scripts/run-migration.js",
     "run-users-migration": "node scripts/run-users-migration.js",
     "run-sessions-migration": "node scripts/run-sessions-migration.js",
-    "run-popular-migration": "node scripts/run-popular-migration.js"
+    "run-popular-migration": "node scripts/run-popular-migration.js",
+    "fix-session": "node database/fix_session_constraint.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
