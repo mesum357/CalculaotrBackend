@@ -43,6 +43,8 @@ app.use(cors({
     }
   },
   credentials: true,
+  exposedHeaders: ['Set-Cookie'], // Expose Set-Cookie header to frontend
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'], // Allow Cookie header
 }));
 
 app.use(express.json());
@@ -80,16 +82,34 @@ app.use(passport.session());
 if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_SESSION === 'true') {
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/auth')) {
-      console.log('[Session Debug]', {
+      console.log('[Session Debug Request]', {
         path: req.path,
         method: req.method,
         sessionId: req.sessionID,
         hasSession: !!req.session,
         isAuthenticated: req.isAuthenticated(),
         userId: req.user?.id,
-        cookie: req.headers.cookie ? req.headers.cookie.substring(0, 50) + '...' : 'none'
+        cookie: req.headers.cookie ? req.headers.cookie.substring(0, 50) + '...' : 'none',
+        origin: req.headers.origin,
+        referer: req.headers.referer
       });
     }
+    
+    // Log response headers after response is sent
+    const originalEnd = res.end;
+    res.end = function(...args) {
+      if (req.path.startsWith('/api/auth')) {
+        console.log('[Session Debug Response]', {
+          path: req.path,
+          method: req.method,
+          statusCode: res.statusCode,
+          setCookie: res.getHeader('Set-Cookie'),
+          headers: res.getHeaders()
+        });
+      }
+      originalEnd.apply(this, args);
+    };
+    
     next();
   });
 }

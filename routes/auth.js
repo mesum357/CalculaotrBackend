@@ -4,6 +4,35 @@ const passport = require('passport');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/database');
 
+// Helper to prevent session regeneration
+function preventSessionRegeneration(req, res, next) {
+  // Store original session ID
+  const originalSessionId = req.sessionID;
+  
+  // Override regenerate to prevent session ID change
+  const originalRegenerate = req.session.regenerate;
+  req.session.regenerate = function(callback) {
+    console.log('[Auth] Session regeneration attempted but prevented');
+    // Don't actually regenerate, just call callback with existing session
+    if (callback) callback(null);
+  };
+  
+  // Also prevent req.login from regenerating by ensuring keepSessionInfo
+  const originalLogin = req.login;
+  req.login = function(user, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+    options = options || {};
+    options.keepSessionInfo = true; // Force keepSessionInfo
+    
+    return originalLogin.call(this, user, options, callback);
+  };
+  
+  next();
+}
+
 // Register (Sign Up)
 router.post('/register', async (req, res) => {
   try {
@@ -126,7 +155,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', (req, res, next) => {
+router.post('/login', preventSessionRegeneration, (req, res, next) => {
   console.log('[Auth] Login request received:', {
     email: req.body?.email,
     hasPassword: !!req.body?.password,
@@ -158,8 +187,15 @@ router.post('/login', (req, res, next) => {
       hasExistingSession: !!req.session
     });
     
-    // Save user to session before calling req.login to avoid regeneration
+    // Store original session ID to prevent regeneration
+    const originalSessionId = req.sessionID;
+    console.log('[Auth] Original session ID:', originalSessionId);
+    
+    // Manually serialize user to session (avoid req.login which regenerates session)
+    req.session.passport = { user: user.id };
     req.session.userId = user.id;
+    
+    // Save session first
     req.session.save((saveErr) => {
       if (saveErr) {
         console.error('[Auth] Failed to save session:', {
@@ -172,7 +208,8 @@ router.post('/login', (req, res, next) => {
         });
       }
       
-      // Now login (this will serialize user but won't regenerate session if we already saved)
+      // Now use req.login but with keepSessionInfo to prevent regeneration
+      // However, we've already saved, so this should just serialize
       req.login(user, { keepSessionInfo: true }, (err) => {
         if (err) {
           console.error('[Auth] Failed to create session:', {
@@ -199,24 +236,68 @@ router.post('/login', (req, res, next) => {
           });
         }
         
+        // Check if session ID changed
+        if (req.sessionID !== originalSessionId) {
+          console.warn('[Auth] Session ID changed during login:', {
+            original: originalSessionId,
+            new: req.sessionID
+          });
+        }
+        
         // Save session again to ensure it's persisted
         req.session.save((finalSaveErr) => {
           if (finalSaveErr) {
             console.error('[Auth] Failed to finalize session save:', finalSaveErr.message);
+            return res.status(500).json({ 
+              error: 'Failed to save session',
+              details: finalSaveErr.message
+            });
+          }
+          
+          // Force session to be saved and cookie to be set
+          // Touch the session to ensure it's marked as modified
+          req.session.touch();
+          
+          // Ensure cookie is set in response
+          const setCookieHeader = res.getHeader('Set-Cookie');
+          console.log('[Auth] Set-Cookie header before response:', setCookieHeader);
+          
+          // Log all response headers for debugging
+          console.log('[Auth] Response headers:', {
+            'set-cookie': res.getHeader('Set-Cookie'),
+            'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
+            'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
+            'access-control-expose-headers': res.getHeader('Access-Control-Expose-Headers')
+          });
+          
+          // If no Set-Cookie header, try to force it
+          if (!setCookieHeader) {
+            console.warn('[Auth] No Set-Cookie header found, attempting to force cookie set');
+            // The session middleware should handle this, but if it doesn't,
+            // we need to ensure the session is saved
+            req.session.save(() => {
+              console.log('[Auth] Session saved, Set-Cookie should be set now');
+            });
           }
           
           console.log('[Auth] Session created successfully:', {
             userId: user.id,
             email: user.email,
             sessionId: req.sessionID,
+            originalSessionId: originalSessionId,
+            sessionIdChanged: req.sessionID !== originalSessionId,
             isAuthenticated: req.isAuthenticated(),
-            cookie: req.session.cookie
+            cookie: req.session.cookie,
+            setCookieHeader: res.getHeader('Set-Cookie'),
+            cookieString: req.session.cookie ? JSON.stringify(req.session.cookie) : 'none'
           });
           
+          // Send response
           return res.json({ 
             message: 'Login successful',
             user: { id: user.id, email: user.email, name: user.name },
-            sessionId: req.sessionID
+            sessionId: req.sessionID,
+            cookieSet: !!setCookieHeader
           });
         });
       });
