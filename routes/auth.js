@@ -50,8 +50,22 @@ router.post('/register', async (req, res) => {
       sessionId: req.sessionID
     });
 
-    // Automatically log in the user after registration
-    req.login(user, (err) => {
+    // Save user to session before calling req.login to avoid regeneration
+    req.session.userId = user.id;
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error('[Auth] Failed to save session:', {
+          error: saveErr.message,
+          code: saveErr.code
+        });
+        return res.status(500).json({ 
+          error: 'Failed to save session',
+          details: saveErr.message
+        });
+      }
+
+      // Automatically log in the user after registration
+      req.login(user, { keepSessionInfo: true }, (err) => {
       if (err) {
         console.error('[Auth] Failed to create session after registration:', {
           error: err.message,
@@ -76,15 +90,25 @@ router.post('/register', async (req, res) => {
         });
       }
       
-      console.log('[Auth] Registration and session creation successful:', {
-        userId: user.id,
-        email: user.email,
-        sessionId: req.sessionID
-      });
-      
-      return res.status(201).json({ 
-        message: 'User registered successfully',
-        user: { id: user.id, email: user.email, name: user.name }
+        // Save session again to ensure it's persisted
+        req.session.save((finalSaveErr) => {
+          if (finalSaveErr) {
+            console.error('[Auth] Failed to finalize session save:', finalSaveErr.message);
+          }
+          
+          console.log('[Auth] Registration and session creation successful:', {
+            userId: user.id,
+            email: user.email,
+            sessionId: req.sessionID,
+            isAuthenticated: req.isAuthenticated()
+          });
+          
+          return res.status(201).json({ 
+            message: 'User registered successfully',
+            user: { id: user.id, email: user.email, name: user.name },
+            sessionId: req.sessionID
+          });
+        });
       });
     });
   } catch (error) {
@@ -130,45 +154,71 @@ router.post('/login', (req, res, next) => {
     console.log('[Auth] Authentication successful, creating session for user:', {
       userId: user.id,
       email: user.email,
-      sessionId: req.sessionID
+      sessionId: req.sessionID,
+      hasExistingSession: !!req.session
     });
     
-    req.login(user, (err) => {
-      if (err) {
-        console.error('[Auth] Failed to create session:', {
-          error: err.message,
-          stack: err.stack,
-          code: err.code,
-          userId: user.id,
-          sessionId: req.sessionID
+    // Save user to session before calling req.login to avoid regeneration
+    req.session.userId = user.id;
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error('[Auth] Failed to save session:', {
+          error: saveErr.message,
+          code: saveErr.code
         });
-        
-        // Check if it's a database/session table issue
-        if (err.code === '42P01' || err.message.includes('relation') || err.message.includes('session')) {
-          return res.status(500).json({ 
-            error: 'Failed to create session', 
-            details: 'Session table may not exist. Please check database initialization.',
-            hint: 'Run: backend/database/schema.sql'
-          });
-        }
-        
         return res.status(500).json({ 
-          error: 'Failed to create session',
-          details: err.message,
-          code: err.code
+          error: 'Failed to save session',
+          details: saveErr.message
         });
       }
       
-      console.log('[Auth] Session created successfully:', {
-        userId: user.id,
-        email: user.email,
-        sessionId: req.sessionID,
-        isAuthenticated: req.isAuthenticated()
-      });
-      
-      return res.json({ 
-        message: 'Login successful',
-        user: { id: user.id, email: user.email, name: user.name }
+      // Now login (this will serialize user but won't regenerate session if we already saved)
+      req.login(user, { keepSessionInfo: true }, (err) => {
+        if (err) {
+          console.error('[Auth] Failed to create session:', {
+            error: err.message,
+            stack: err.stack,
+            code: err.code,
+            userId: user.id,
+            sessionId: req.sessionID
+          });
+          
+          // Check if it's a database/session table issue
+          if (err.code === '42P01' || err.message.includes('relation') || err.message.includes('session')) {
+            return res.status(500).json({ 
+              error: 'Failed to create session', 
+              details: 'Session table may not exist. Please check database initialization.',
+              hint: 'Run: backend/database/schema.sql'
+            });
+          }
+          
+          return res.status(500).json({ 
+            error: 'Failed to create session',
+            details: err.message,
+            code: err.code
+          });
+        }
+        
+        // Save session again to ensure it's persisted
+        req.session.save((finalSaveErr) => {
+          if (finalSaveErr) {
+            console.error('[Auth] Failed to finalize session save:', finalSaveErr.message);
+          }
+          
+          console.log('[Auth] Session created successfully:', {
+            userId: user.id,
+            email: user.email,
+            sessionId: req.sessionID,
+            isAuthenticated: req.isAuthenticated(),
+            cookie: req.session.cookie
+          });
+          
+          return res.json({ 
+            message: 'Login successful',
+            user: { id: user.id, email: user.email, name: user.name },
+            sessionId: req.sessionID
+          });
+        });
       });
     });
   })(req, res, next);

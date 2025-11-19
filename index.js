@@ -56,14 +56,18 @@ app.use(
       tableName: 'session', // Use default table name 'session'
       createTableIfMissing: false, // Don't auto-create, we'll create it manually with proper constraints
     }),
+    name: 'connect.sid', // Session cookie name
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false,
+    resave: false, // Don't save session if unmodified
+    saveUninitialized: false, // Don't create session until something is stored
+    rolling: false, // Don't reset expiration on every request
     cookie: {
       secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
-      httpOnly: true,
+      httpOnly: true, // Prevent XSS attacks
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-origin in production (requires secure: true)
+      // Don't set domain - let browser handle it
+      // path: '/' is default
     },
   })
 );
@@ -71,6 +75,24 @@ app.use(
 // Initialize Passport
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Session debugging middleware (only in development or when DEBUG_SESSION is set)
+if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_SESSION === 'true') {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/auth')) {
+      console.log('[Session Debug]', {
+        path: req.path,
+        method: req.method,
+        sessionId: req.sessionID,
+        hasSession: !!req.session,
+        isAuthenticated: req.isAuthenticated(),
+        userId: req.user?.id,
+        cookie: req.headers.cookie ? req.headers.cookie.substring(0, 50) + '...' : 'none'
+      });
+    }
+    next();
+  });
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
