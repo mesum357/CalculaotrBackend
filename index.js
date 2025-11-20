@@ -3,6 +3,7 @@ const cors = require('cors');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const passport = require('./config/passport');
+require('./config/passport-admin'); // Load admin passport strategy
 require('dotenv').config();
 
 const pool = require('./config/database');
@@ -12,6 +13,7 @@ const subcategoriesRouter = require('./routes/subcategories');
 const calculatorsRouter = require('./routes/calculators');
 const calculatorInteractionsRouter = require('./routes/calculator-interactions');
 const authRouter = require('./routes/auth');
+const adminAuthRouter = require('./routes/admin-auth');
 const usersRouter = require('./routes/users');
 const backupRouter = require('./routes/backup');
 
@@ -270,6 +272,7 @@ app.use('/api/subcategories', subcategoriesRouter);
 app.use('/api/calculators', calculatorsRouter);
 app.use('/api/calculator-interactions', calculatorInteractionsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/backup', backupRouter);
 

@@ -141,8 +141,7 @@ async function saveCalculatorsBackup() {
     
     // Write backup file
     await fs.writeFile(backupFilePath, JSON.stringify(backup, null, 2), 'utf8');
-    
-    // Verify file was written
+        // Verify file was written
     const stats = await fs.stat(backupFilePath);
     console.log(`✓ Backup saved: ${calculatorsBackup.length} calculators saved to ${backupFilePath} (${stats.size} bytes)`);
     return { success: true, count: calculatorsBackup.length, path: backupFilePath, size: stats.size };
