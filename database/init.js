@@ -1,6 +1,7 @@
 const pool = require('../config/database');
 const fs = require('fs');
 const path = require('path');
+const { seedDefaultCategories } = require('./seed-default-data');
 
 /**
  * Initialize database schema if tables don't exist
@@ -24,6 +25,15 @@ async function initializeDatabase() {
     
     if (allTablesExist) {
       console.log('✓ Database tables already exist (categories, calculators, users, session)');
+      
+      // Even if tables exist, check if categories are empty and seed them
+      try {
+        await seedDefaultCategories();
+      } catch (seedError) {
+        console.warn('⚠️  Warning: Could not seed default categories:', seedError.message);
+        // Don't fail if seeding fails
+      }
+      
       return true;
     }
     
@@ -159,6 +169,15 @@ async function initializeDatabase() {
       }
       
       console.log('✓ Database schema initialized successfully');
+      
+      // Seed default categories and subcategories if database is empty
+      try {
+        await seedDefaultCategories();
+      } catch (seedError) {
+        console.warn('⚠️  Warning: Could not seed default categories:', seedError.message);
+        // Don't fail initialization if seeding fails
+      }
+      
       return true;
       
     } finally {
