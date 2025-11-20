@@ -76,108 +76,142 @@ const sessionConfig = {
 
 app.use(session(sessionConfig));
 
-// Middleware to ensure session cookie is set and debug session issues
+// Middleware to prevent session regeneration and ensure cookies are set
 app.use((req, res, next) => {
-  // Store original methods
-  const originalJson = res.json.bind(res);
-  const originalEnd = res.end.bind(res);
+  // Store original session ID to detect regeneration
+  const originalSessionId = req.sessionID;
   
-  // Debug: Log session state on every request
+  // Prevent session regeneration by overriding regenerate
+  if (req.session && req.session.regenerate) {
+    const originalRegenerate = req.session.regenerate.bind(req.session);
+    req.session.regenerate = function(callback) {
+      console.warn('[Session Middleware] Session regeneration prevented', {
+        originalId: originalSessionId,
+        currentId: req.sessionID,
+        path: req.path
+      });
+      // Don't actually regenerate, just call callback
+      if (callback) callback(null);
+    };
+  }
+  
+  // Debug: Log session state on auth requests
   if (req.path.startsWith('/api/auth')) {
-    console.log('[Session Middleware] Request received:', {
+    console.log('[Session Middleware] Request:', {
       path: req.path,
       method: req.method,
-      hasSession: !!req.session,
       sessionID: req.sessionID,
-      hasPassport: req.session?.passport ? 'yes' : 'no',
-      hasUserId: req.session?.userId ? 'yes' : 'no',
+      hasPassport: !!req.session?.passport,
+      hasUserId: !!req.session?.userId,
       isAuthenticated: req.isAuthenticated?.() || false,
-      cookieHeader: req.headers.cookie ? req.headers.cookie.substring(0, 30) + '...' : 'none'
+      hasCookieHeader: !!req.headers.cookie
     });
   }
   
-  // Override res.json to ensure session cookie is set
+  // Track if response has been sent to prevent double saves
+  let responseSent = false;
+  let sessionSaved = false;
+  const originalJson = res.json.bind(res);
+  const originalEnd = res.end.bind(res);
+  
+  // Helper to check if session has data
+  const checkHasSessionData = () => {
+    return req.session && req.sessionID && 
+      (req.session.passport || req.session.userId);
+  };
+  
+  // Override res.json - check session data at response time
   res.json = function(body) {
-    // If session exists, ensure it's saved and cookie is set
-    if (req.session && req.sessionID) {
-      // Force session save to trigger cookie setting
+    if (responseSent) {
+      return originalJson(body);
+    }
+    
+    // Check if session has data at response time (not request time)
+    const hasSessionData = checkHasSessionData();
+    
+    // Only save session if it has data AND hasn't been saved yet
+    if (hasSessionData && !sessionSaved) {
+      responseSent = true;
+      sessionSaved = true;
+      
+      // Save session before sending response
       req.session.save((err) => {
         if (err) {
-          console.error('[Session Middleware] Error saving session:', {
-            error: err.message,
+          console.error('[Session Middleware] Error saving session:', err);
+          originalJson(body);
+          return;
+        }
+        
+        // Check if cookie is set
+        const setCookie = res.getHeader('Set-Cookie');
+        
+        if (req.path.startsWith('/api/auth')) {
+          console.log('[Session Middleware] Session saved:', {
             sessionId: req.sessionID,
+            originalId: originalSessionId,
+            idChanged: req.sessionID !== originalSessionId,
+            hasSetCookie: !!setCookie,
             path: req.path
           });
-        } else {
-          const setCookie = res.getHeader('Set-Cookie');
-          console.log('[Session Middleware] Session saved in res.json:', {
-            sessionId: req.sessionID,
-            hasSetCookie: !!setCookie,
-            setCookie: setCookie,
-            path: req.path,
-            sessionData: {
-              hasPassport: !!req.session.passport,
-              hasUserId: !!req.session.userId,
-              cookie: req.session.cookie
-            }
-          });
+        }
+        
+        // If no cookie and session has data, manually set it
+        if (!setCookie && hasSessionData) {
+          const crypto = require('crypto');
+          const secret = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
+          const signature = crypto
+            .createHmac('sha256', secret)
+            .update(req.sessionID)
+            .digest('base64')
+            .replace(/=+$/, '');
           
-          // If still no cookie after save, manually set it as fallback
-          if (!setCookie && req.sessionID) {
-            console.warn('[Session Middleware] No Set-Cookie header after save, manually setting');
-            
-            // Create signed cookie value (connect-pg-simple format)
-            const crypto = require('crypto');
-            const secret = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
-            const signature = crypto
-              .createHmac('sha256', secret)
-              .update(req.sessionID)
-              .digest('base64')
-              .replace(/=+$/, '');
-            
-            const cookieValue = `s:${req.sessionID}.${signature}`;
-            const maxAge = Math.floor(req.session.cookie.maxAge / 1000);
-            const sameSite = req.session.cookie.sameSite;
-            const secure = req.session.cookie.secure;
-            
-            const cookieString = `connect.sid=${cookieValue}; Path=/; Max-Age=${maxAge}; HttpOnly; ${secure ? 'Secure; ' : ''}SameSite=${sameSite}`;
-            
-            res.setHeader('Set-Cookie', cookieString);
-            console.log('[Session Middleware] Manually set cookie:', cookieString.substring(0, 80) + '...');
+          const cookieValue = `s:${req.sessionID}.${signature}`;
+          const maxAge = Math.floor(req.session.cookie.maxAge / 1000);
+          const sameSite = req.session.cookie.sameSite;
+          const secure = req.session.cookie.secure;
+          
+          const cookieString = `connect.sid=${cookieValue}; Path=/; Max-Age=${maxAge}; HttpOnly; ${secure ? 'Secure; ' : ''}SameSite=${sameSite}`;
+          res.setHeader('Set-Cookie', cookieString);
+          
+          if (req.path.startsWith('/api/auth')) {
+            console.log('[Session Middleware] Manually set cookie for session with data');
           }
         }
         
-        // Send response after session is saved
         originalJson(body);
       });
-      
-      // Return early to prevent double response
       return res;
     }
     
-    // No session, send response normally
+    // No session data or already saved, send response normally
+    responseSent = true;
     return originalJson(body);
   };
   
-  // Override res.end for non-JSON responses
+  // Override res.end - check session data at response time
   res.end = function(...args) {
-    if (req.session && req.sessionID) {
+    if (responseSent) {
+      return originalEnd.apply(this, args);
+    }
+    
+    // Check if session has data at response time
+    const hasSessionData = checkHasSessionData();
+    
+    // Only save session if it has data AND hasn't been saved yet
+    if (hasSessionData && !sessionSaved) {
+      responseSent = true;
+      sessionSaved = true;
       req.session.save((err) => {
         if (err) {
           console.error('[Session Middleware] Error saving session in res.end:', err);
-        } else {
-          const setCookie = res.getHeader('Set-Cookie');
-          console.log('[Session Middleware] Session saved in res.end:', {
-            sessionId: req.sessionID,
-            hasSetCookie: !!setCookie,
-            path: req.path
-          });
         }
         originalEnd.apply(this, args);
       });
-    } else {
-      originalEnd.apply(this, args);
+      return;
     }
+    
+    responseSent = true;
+    originalEnd.apply(this, args);
   };
   
   next();

@@ -244,99 +244,30 @@ router.post('/login', preventSessionRegeneration, (req, res, next) => {
           });
         }
         
-        // Save session again to ensure it's persisted
-        req.session.save((finalSaveErr) => {
-          if (finalSaveErr) {
-            console.error('[Auth] Failed to finalize session save:', finalSaveErr.message);
-            return res.status(500).json({ 
-              error: 'Failed to save session',
-              details: finalSaveErr.message
-            });
-          }
-          
-          // CRITICAL: Force session to be saved BEFORE sending response
-          // The session middleware only sets cookies when the session is saved
-          
-          // Mark session as modified to ensure it's saved
-          req.session.touch();
-          
-          // Ensure session cookie options are correct
-          if (req.session.cookie) {
-            req.session.cookie.secure = process.env.NODE_ENV === 'production';
-            req.session.cookie.sameSite = process.env.NODE_ENV === 'production' ? 'none' : 'lax';
-            req.session.cookie.httpOnly = true;
-            req.session.cookie.path = '/';
-          }
-          
-          console.log('[Auth] About to save session before sending response:', {
-            sessionId: req.sessionID,
-            sessionModified: req.session.hasOwnProperty('passport'),
-            cookieConfig: req.session.cookie
-          });
-          
-          // Save session one more time to ensure cookie is set
-          req.session.save((saveErr) => {
-            if (saveErr) {
-              console.error('[Auth] Final session save error:', saveErr);
-              return res.status(500).json({ 
-                error: 'Failed to save session',
-                details: saveErr.message
-              });
-            }
-            
-            // Check if cookie is now set
-            const setCookieHeader = res.getHeader('Set-Cookie');
-            
-            console.log('[Auth] After session save:', {
-              sessionId: req.sessionID,
-              setCookieHeader: setCookieHeader,
-              allResponseHeaders: Object.keys(res.getHeaders())
-            });
-            
-            // If still no cookie, manually set it
-            if (!setCookieHeader && req.sessionID) {
-              console.warn('[Auth] Still no Set-Cookie header, manually setting cookie');
-              
-              // Manually create and set the cookie
-              const cookieName = 'connect.sid';
-              const cookieValue = req.sessionID; // Simplified, session store should sign it
-              const maxAge = Math.floor(req.session.cookie.maxAge / 1000);
-              
-              const cookieString = `${cookieName}=${cookieValue}; Path=/; Max-Age=${maxAge}; HttpOnly; ${req.session.cookie.secure ? 'Secure; ' : ''}SameSite=${req.session.cookie.sameSite}`;
-              
-              res.setHeader('Set-Cookie', cookieString);
-              console.log('[Auth] Manually set cookie:', cookieString.substring(0, 100) + '...');
-            }
-            
-            // Log all headers before sending
-            console.log('[Auth] Final response headers:', {
-              'set-cookie': res.getHeader('Set-Cookie'),
-              'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
-              'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
-              'access-control-expose-headers': res.getHeader('Access-Control-Expose-Headers'),
-              allHeaders: res.getHeaders()
-            });
-            
-            console.log('[Auth] Session created successfully:', {
-              userId: user.id,
-              email: user.email,
-              sessionId: req.sessionID,
-              originalSessionId: originalSessionId,
-              sessionIdChanged: req.sessionID !== originalSessionId,
-              isAuthenticated: req.isAuthenticated(),
-              cookie: req.session.cookie,
-              setCookieHeader: res.getHeader('Set-Cookie'),
-              cookieSet: !!res.getHeader('Set-Cookie')
-            });
-            
-            // Send response
-            return res.json({ 
-              message: 'Login successful',
-              user: { id: user.id, email: user.email, name: user.name },
-              sessionId: req.sessionID,
-              cookieSet: !!res.getHeader('Set-Cookie')
-            });
-          });
+        // Ensure session cookie options are correct
+        if (req.session.cookie) {
+          req.session.cookie.secure = process.env.NODE_ENV === 'production';
+          req.session.cookie.sameSite = process.env.NODE_ENV === 'production' ? 'none' : 'lax';
+          req.session.cookie.httpOnly = true;
+          req.session.cookie.path = '/';
+        }
+        
+        console.log('[Auth] Session configured, letting middleware handle save:', {
+          sessionId: req.sessionID,
+          originalSessionId: originalSessionId,
+          sessionIdChanged: req.sessionID !== originalSessionId,
+          hasPassport: !!req.session.passport,
+          hasUserId: !!req.session.userId,
+          isAuthenticated: req.isAuthenticated()
+        });
+        
+        // Don't save here - let the middleware handle it to prevent duplicate saves
+        // The middleware will save the session before sending the response
+        // Send response - middleware will intercept and save session
+        return res.json({ 
+          message: 'Login successful',
+          user: { id: user.id, email: user.email, name: user.name },
+          sessionId: req.sessionID
         });
       });
     });
