@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
+const { saveCalculatorsBackup } = require('../utils/backup-calculators');
 
 // Get all calculators
 router.get('/', async (req, res) => {
@@ -28,6 +29,17 @@ router.get('/', async (req, res) => {
     let selectClause = `SELECT calc.id, calc.category_id, calc.subcategory_id, 
                                calc.name, calc.slug, calc.description, calc.href, 
                                calc.is_active, calc.created_at, calc.updated_at`;
+    
+    // Check if subtitle column exists
+    let hasSubtitle = false;
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      hasSubtitle = true;
+      selectClause += `, calc.subtitle`;
+    } catch (e) {
+      hasSubtitle = false;
+      selectClause += `, NULL as subtitle`;
+    }
     
     if (hasNewColumns) {
       selectClause += `, calc.inputs, calc.results, calc.tags, calc.most_used, calc.likes`;
@@ -155,6 +167,14 @@ router.get('/:id', async (req, res) => {
                                calc.name, calc.slug, calc.description, calc.href, 
                                calc.is_active, calc.created_at, calc.updated_at`;
     
+    // Check if subtitle column exists
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      selectClause += `, calc.subtitle`;
+    } catch (e) {
+      selectClause += `, NULL as subtitle`;
+    }
+    
     if (hasNewColumns) {
       selectClause += `, calc.inputs, calc.results, calc.tags, calc.most_used, calc.likes`;
     } else {
@@ -196,9 +216,18 @@ router.get('/slug/:slug', async (req, res) => {
     const { slug } = req.params;
     const { category_id, subcategory_id } = req.query;
     
+    // Check if subtitle column exists
+    let hasSubtitle = false;
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      hasSubtitle = true;
+    } catch (e) {
+      hasSubtitle = false;
+    }
+    
     let query = `SELECT calc.*, 
                         cat.name as category_name, cat.slug as category_slug,
-                        sub.name as subcategory_name, sub.slug as subcategory_slug
+                        sub.name as subcategory_name, sub.slug as subcategory_slug${hasSubtitle ? ', calc.subtitle' : ', NULL as subtitle'}
                  FROM calculators calc
                  LEFT JOIN categories cat ON calc.category_id = cat.id
                  LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
@@ -246,6 +275,7 @@ router.post('/', async (req, res) => {
       name, 
       slug, 
       description, 
+      subtitle,
       href, 
       is_active,
       inputs,
@@ -320,6 +350,15 @@ router.post('/', async (req, res) => {
       hasNewColumns = false;
     }
     
+    // Check if subtitle column exists
+    let hasSubtitle = false;
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      hasSubtitle = true;
+    } catch (e) {
+      hasSubtitle = false;
+    }
+    
     // Build INSERT query dynamically based on available columns
     let insertColumns = `category_id, subcategory_id, name, slug, description, href, is_active`;
     let insertValues = `$1, $2, $3, $4, $5, $6, $7`;
@@ -333,6 +372,13 @@ router.post('/', async (req, res) => {
       is_active !== undefined ? is_active : true
     ];
     let paramCount = 7;
+    
+    // Add subtitle if column exists
+    if (hasSubtitle) {
+      insertColumns += `, subtitle`;
+      insertValues += `, $${++paramCount}`;
+      params.push(subtitle || null);
+    }
     
     if (hasNewColumns) {
       insertColumns += `, inputs, results, tags, most_used`;
@@ -355,6 +401,11 @@ router.post('/', async (req, res) => {
       `INSERT INTO calculators (${insertColumns}) VALUES (${insertValues}) RETURNING *`,
       params
     );
+    
+    // Save backup to JSON file (non-blocking)
+    saveCalculatorsBackup().catch(err => {
+      console.error('Failed to save backup after calculator creation:', err);
+    });
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -383,6 +434,7 @@ router.put('/:id', async (req, res) => {
       name, 
       slug, 
       description, 
+      subtitle,
       href, 
       is_active,
       inputs,
@@ -432,6 +484,15 @@ router.put('/:id', async (req, res) => {
       hasNewColumns = false;
     }
     
+    // Check if subtitle column exists
+    let hasSubtitle = false;
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      hasSubtitle = true;
+    } catch (e) {
+      hasSubtitle = false;
+    }
+    
     // Build UPDATE query dynamically based on available columns
     let updateClause = `UPDATE calculators SET 
         category_id = $1, 
@@ -451,6 +512,13 @@ router.put('/:id', async (req, res) => {
       is_active
     ];
     let paramCount = 7;
+    
+    // Add subtitle if column exists
+    if (hasSubtitle) {
+      updateClause += `,
+        subtitle = $${++paramCount}`;
+      params.push(subtitle || null);
+    }
     
     if (hasNewColumns) {
       updateClause += `,
@@ -483,6 +551,11 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Calculator not found' });
     }
     
+    // Save backup to JSON file (non-blocking)
+    saveCalculatorsBackup().catch(err => {
+      console.error('Failed to save backup after calculator update:', err);
+    });
+    
     res.json(result.rows[0]);
   } catch (error) {
     if (error.code === '23505') {
@@ -512,6 +585,11 @@ router.delete('/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Calculator not found' });
     }
+    
+    // Save backup to JSON file (non-blocking)
+    saveCalculatorsBackup().catch(err => {
+      console.error('Failed to save backup after calculator deletion:', err);
+    });
     
     res.json({ message: 'Calculator deleted successfully' });
   } catch (error) {

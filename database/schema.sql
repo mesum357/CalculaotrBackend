@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS calculators (
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL,
     description TEXT,
+    subtitle TEXT,
     href VARCHAR(500),
     is_active BOOLEAN DEFAULT true,
     inputs JSONB DEFAULT '[]'::jsonb,
