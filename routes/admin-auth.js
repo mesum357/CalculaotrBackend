@@ -32,6 +32,11 @@ function preventSessionRegeneration(req, res, next) {
 
 // Admin Login
 router.post('/login', preventSessionRegeneration, (req, res, next) => {
+  // Trim whitespace from username
+  if (req.body?.username) {
+    req.body.username = req.body.username.trim();
+  }
+  
   console.log('[Admin Auth] Login request received:', {
     username: req.body?.username,
     hasPassword: !!req.body?.password,
@@ -287,6 +292,88 @@ router.get('/admins', async (req, res) => {
   } catch (error) {
     console.error('[Admin Auth] Get admins error:', error);
     res.status(500).json({ error: 'Failed to fetch admins', details: error.message });
+  }
+});
+
+// Utility endpoint to check/initialize admin user (for troubleshooting)
+// This endpoint can be called without authentication to verify admin setup
+router.post('/init-admin', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    
+    // Check if admins table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'admins'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      return res.status(500).json({ 
+        error: 'Admins table does not exist',
+        hint: 'Run the database migration first'
+      });
+    }
+    
+    // Check if admin user exists
+    const adminCheck = await pool.query(
+      'SELECT id, username, role, is_active FROM admins WHERE username = $1',
+      ['admin']
+    );
+    
+    if (adminCheck.rows.length > 0) {
+      const admin = adminCheck.rows[0];
+      return res.json({
+        exists: true,
+        admin: {
+          id: admin.id,
+          username: admin.username,
+          role: admin.role,
+          is_active: admin.is_active
+        },
+        message: 'Admin user already exists'
+      });
+    }
+    
+    // Create admin user if it doesn't exist
+    const passwordHash = await bcrypt.hash('admin123', 10);
+    
+    const result = await pool.query(
+      `INSERT INTO admins (username, password_hash, role, permissions, is_active)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, username, role, is_active, created_at`,
+      [
+        'admin',
+        passwordHash,
+        'admin',
+        JSON.stringify(['/', '/calculators', '/users', '/settings']),
+        true
+      ]
+    );
+    
+    res.json({
+      exists: false,
+      created: true,
+      admin: {
+        id: result.rows[0].id,
+        username: result.rows[0].username,
+        role: result.rows[0].role,
+        is_active: result.rows[0].is_active
+      },
+      message: 'Admin user created successfully',
+      credentials: {
+        username: 'admin',
+        password: 'admin123'
+      }
+    });
+  } catch (error) {
+    console.error('[Admin Auth] Init admin error:', error);
+    res.status(500).json({ 
+      error: 'Failed to initialize admin user', 
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
