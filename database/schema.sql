@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS subcategories (
 -- Calculators table (belongs to both category and subcategory)
 CREATE TABLE IF NOT EXISTS calculators (
     id SERIAL PRIMARY KEY,
-    category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-    subcategory_id INTEGER NOT NULL REFERENCES subcategories(id) ON DELETE CASCADE,
+    category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+    subcategory_id INTEGER REFERENCES subcategories(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL,
     description TEXT,

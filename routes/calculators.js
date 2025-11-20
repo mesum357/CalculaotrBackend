@@ -47,8 +47,8 @@ router.get('/', async (req, res) => {
     
     let query = `${selectClause}
                  FROM calculators calc
-                 JOIN categories cat ON calc.category_id = cat.id
-                 JOIN subcategories sub ON calc.subcategory_id = sub.id
+                 LEFT JOIN categories cat ON calc.category_id = cat.id
+                 LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
                  WHERE 1=1`;
     const params = [];
     let paramCount = 0;
@@ -168,8 +168,8 @@ router.get('/:id', async (req, res) => {
     const result = await pool.query(
       `${selectClause}
        FROM calculators calc
-       JOIN categories cat ON calc.category_id = cat.id
-       JOIN subcategories sub ON calc.subcategory_id = sub.id
+       LEFT JOIN categories cat ON calc.category_id = cat.id
+       LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
        WHERE calc.id = $1`,
       [id]
     );
@@ -200,8 +200,8 @@ router.get('/slug/:slug', async (req, res) => {
                         cat.name as category_name, cat.slug as category_slug,
                         sub.name as subcategory_name, sub.slug as subcategory_slug
                  FROM calculators calc
-                 JOIN categories cat ON calc.category_id = cat.id
-                 JOIN subcategories sub ON calc.subcategory_id = sub.id
+                 LEFT JOIN categories cat ON calc.category_id = cat.id
+                 LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
                  WHERE calc.slug = $1`;
     const params = [slug];
     let paramCount = 1;
@@ -255,40 +255,52 @@ router.post('/', async (req, res) => {
       popular
     } = req.body;
     
-    if (!category_id || !subcategory_id || !name || !slug) {
-      return res.status(400).json({ error: 'Category ID, subcategory ID, name, and slug are required' });
+    // Name and slug are required, but category_id and subcategory_id are optional
+    if (!name || !slug) {
+      return res.status(400).json({ error: 'Name and slug are required' });
     }
     
-    // Parse and validate category_id and subcategory_id as integers
-    const parsedCategoryId = parseInt(category_id, 10);
-    const parsedSubcategoryId = parseInt(subcategory_id, 10);
+    // Parse and validate category_id and subcategory_id as integers (optional)
+    let parsedCategoryId = null;
+    let parsedSubcategoryId = null;
     
-    if (isNaN(parsedCategoryId)) {
-      return res.status(400).json({ error: 'Category ID must be a valid integer' });
+    if (category_id !== null && category_id !== undefined && category_id !== '') {
+      parsedCategoryId = parseInt(category_id, 10);
+      if (isNaN(parsedCategoryId)) {
+        return res.status(400).json({ error: 'Category ID must be a valid integer' });
+      }
+      
+      // Verify category exists
+      const categoryCheck = await pool.query(
+        'SELECT id FROM categories WHERE id = $1',
+        [parsedCategoryId]
+      );
+      
+      if (categoryCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Category not found' });
+      }
     }
     
-    if (isNaN(parsedSubcategoryId)) {
-      return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
-    }
-    
-    // Verify category exists
-    const categoryCheck = await pool.query(
-      'SELECT id FROM categories WHERE id = $1',
-      [parsedCategoryId]
-    );
-    
-    if (categoryCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-    
-    // Verify subcategory exists and belongs to category
-    const subcategoryCheck = await pool.query(
-      'SELECT id FROM subcategories WHERE id = $1 AND category_id = $2',
-      [parsedSubcategoryId, parsedCategoryId]
-    );
-    
-    if (subcategoryCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Subcategory not found or does not belong to the specified category' });
+    if (subcategory_id !== null && subcategory_id !== undefined && subcategory_id !== '') {
+      parsedSubcategoryId = parseInt(subcategory_id, 10);
+      if (isNaN(parsedSubcategoryId)) {
+        return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
+      }
+      
+      // If subcategory is provided, category must also be provided
+      if (!parsedCategoryId) {
+        return res.status(400).json({ error: 'Category ID must be provided when subcategory ID is provided' });
+      }
+      
+      // Verify subcategory exists and belongs to category
+      const subcategoryCheck = await pool.query(
+        'SELECT id FROM subcategories WHERE id = $1 AND category_id = $2',
+        [parsedSubcategoryId, parsedCategoryId]
+      );
+      
+      if (subcategoryCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Subcategory not found or does not belong to the specified category' });
+      }
     }
     
     // Check if new columns exist
@@ -380,16 +392,27 @@ router.put('/:id', async (req, res) => {
       popular
     } = req.body;
     
-    // Parse and validate category_id and subcategory_id as integers
-    const parsedCategoryId = parseInt(category_id, 10);
-    const parsedSubcategoryId = parseInt(subcategory_id, 10);
+    // Parse and validate category_id and subcategory_id as integers (optional)
+    let parsedCategoryId = null;
+    let parsedSubcategoryId = null;
     
-    if (isNaN(parsedCategoryId)) {
-      return res.status(400).json({ error: 'Category ID must be a valid integer' });
+    if (category_id !== null && category_id !== undefined && category_id !== '') {
+      parsedCategoryId = parseInt(category_id, 10);
+      if (isNaN(parsedCategoryId)) {
+        return res.status(400).json({ error: 'Category ID must be a valid integer' });
+      }
     }
     
-    if (isNaN(parsedSubcategoryId)) {
-      return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
+    if (subcategory_id !== null && subcategory_id !== undefined && subcategory_id !== '') {
+      parsedSubcategoryId = parseInt(subcategory_id, 10);
+      if (isNaN(parsedSubcategoryId)) {
+        return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
+      }
+      
+      // If subcategory is provided, category must also be provided
+      if (!parsedCategoryId) {
+        return res.status(400).json({ error: 'Category ID must be provided when subcategory ID is provided' });
+      }
     }
     
     // Check if new columns exist
