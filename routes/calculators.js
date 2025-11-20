@@ -403,9 +403,18 @@ router.post('/', async (req, res) => {
     );
     
     // Save backup to JSON file (non-blocking)
-    saveCalculatorsBackup().catch(err => {
-      console.error('Failed to save backup after calculator creation:', err);
-    });
+    saveCalculatorsBackup()
+      .then(result => {
+        if (result.success) {
+          console.log(`✓ Backup saved successfully: ${result.count} calculators to ${result.path}`);
+        } else {
+          console.error('✗ Backup failed:', result.error);
+        }
+      })
+      .catch(err => {
+        console.error('✗ Failed to save backup after calculator creation:', err);
+        console.error('Backup error stack:', err.stack);
+      });
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -552,9 +561,18 @@ router.put('/:id', async (req, res) => {
     }
     
     // Save backup to JSON file (non-blocking)
-    saveCalculatorsBackup().catch(err => {
-      console.error('Failed to save backup after calculator update:', err);
-    });
+    saveCalculatorsBackup()
+      .then(result => {
+        if (result.success) {
+          console.log(`✓ Backup saved successfully after update: ${result.count} calculators to ${result.path}`);
+        } else {
+          console.error('✗ Backup failed after update:', result.error);
+        }
+      })
+      .catch(err => {
+        console.error('✗ Failed to save backup after calculator update:', err);
+        console.error('Backup error stack:', err.stack);
+      });
     
     res.json(result.rows[0]);
   } catch (error) {
@@ -587,9 +605,18 @@ router.delete('/:id', async (req, res) => {
     }
     
     // Save backup to JSON file (non-blocking)
-    saveCalculatorsBackup().catch(err => {
-      console.error('Failed to save backup after calculator deletion:', err);
-    });
+    saveCalculatorsBackup()
+      .then(result => {
+        if (result.success) {
+          console.log(`✓ Backup saved successfully after deletion: ${result.count} calculators to ${result.path}`);
+        } else {
+          console.error('✗ Backup failed after deletion:', result.error);
+        }
+      })
+      .catch(err => {
+        console.error('✗ Failed to save backup after calculator deletion:', err);
+        console.error('Backup error stack:', err.stack);
+      });
     
     res.json({ message: 'Calculator deleted successfully' });
   } catch (error) {

@@ -13,6 +13,7 @@ const calculatorsRouter = require('./routes/calculators');
 const calculatorInteractionsRouter = require('./routes/calculator-interactions');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
+const backupRouter = require('./routes/backup');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -270,6 +271,7 @@ app.use('/api/calculators', calculatorsRouter);
 app.use('/api/calculator-interactions', calculatorInteractionsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/backup', backupRouter);
 
 // Legacy endpoint for average percentage calculator (for backward compatibility)
 app.get('/api/calculators/average-percentage', async (req, res) => {

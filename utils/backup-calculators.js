@@ -116,13 +116,26 @@ async function saveCalculatorsBackup() {
     const dataDir = path.join(frontendDir, 'data');
     const backupFilePath = path.join(dataDir, 'calculators-backup.json');
     
+    console.log('[Backup] Resolved paths:', {
+      backendDir,
+      projectRoot,
+      frontendDir,
+      dataDir,
+      backupFilePath,
+      cwd: process.cwd()
+    });
+    
     // Create data directory if it doesn't exist
     try {
       await fs.mkdir(dataDir, { recursive: true });
+      console.log('[Backup] Data directory created/verified:', dataDir);
     } catch (err) {
       // Directory might already exist, that's fine
       if (err.code !== 'EEXIST') {
-        console.warn('Warning: Could not create data directory:', err.message);
+        console.error('[Backup] Warning: Could not create data directory:', err.message);
+        console.error('[Backup] Directory creation error:', err);
+      } else {
+        console.log('[Backup] Data directory already exists:', dataDir);
       }
     }
     
