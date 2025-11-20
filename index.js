@@ -12,6 +12,7 @@ const subcategoriesRouter = require('./routes/subcategories');
 const calculatorsRouter = require('./routes/calculators');
 const calculatorInteractionsRouter = require('./routes/calculator-interactions');
 const authRouter = require('./routes/auth');
+const usersRouter = require('./routes/users');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -268,6 +269,7 @@ app.use('/api/subcategories', subcategoriesRouter);
 app.use('/api/calculators', calculatorsRouter);
 app.use('/api/calculator-interactions', calculatorInteractionsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
 
 // Legacy endpoint for average percentage calculator (for backward compatibility)
 app.get('/api/calculators/average-percentage', async (req, res) => {
