@@ -297,7 +297,8 @@ router.get('/admins', async (req, res) => {
 
 // Utility endpoint to check/initialize admin user (for troubleshooting)
 // This endpoint can be called without authentication to verify admin setup
-router.post('/init-admin', async (req, res) => {
+// Supports both GET (for browser) and POST (for curl/API calls)
+const initAdminHandler = async (req, res) => {
   try {
     const bcrypt = require('bcryptjs');
     
@@ -375,7 +376,11 @@ router.post('/init-admin', async (req, res) => {
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
-});
+};
+
+// Allow both GET and POST for easier access
+router.get('/init-admin', initAdminHandler);
+router.post('/init-admin', initAdminHandler);
 
 module.exports = router;
 
