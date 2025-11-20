@@ -142,12 +142,20 @@ async function saveCalculatorsBackup() {
     // Write backup file
     await fs.writeFile(backupFilePath, JSON.stringify(backup, null, 2), 'utf8');
     
-    console.log(`✓ Backup saved: ${calculatorsBackup.length} calculators saved to ${backupFilePath}`);
-    return { success: true, count: calculatorsBackup.length, path: backupFilePath };
+    // Verify file was written
+    const stats = await fs.stat(backupFilePath);
+    console.log(`✓ Backup saved: ${calculatorsBackup.length} calculators saved to ${backupFilePath} (${stats.size} bytes)`);
+    return { success: true, count: calculatorsBackup.length, path: backupFilePath, size: stats.size };
   } catch (error) {
-    console.error('Error saving calculators backup:', error);
+    console.error('✗ Error saving calculators backup:', error);
+    console.error('[Backup] Error details:', {
+      message: error.message,
+      code: error.code,
+      path: backupFilePath,
+      stack: error.stack
+    });
     // Don't throw - we don't want backup failures to break the main operation
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, code: error.code };
   }
 }
 
