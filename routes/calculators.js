@@ -177,9 +177,19 @@ router.get('/:id', async (req, res) => {
     
     if (hasNewColumns) {
       selectClause += `, calc.inputs, calc.results, calc.tags, calc.most_used, calc.likes`;
+      // Check if popular column exists
+      let hasPopular = false;
+      try {
+        await pool.query('SELECT popular FROM calculators LIMIT 1');
+        hasPopular = true;
+        selectClause += `, calc.popular`;
+      } catch (e) {
+        hasPopular = false;
+        selectClause += `, false as popular`;
+      }
     } else {
       selectClause += `, '[]'::jsonb as inputs, '[]'::jsonb as results, 
-                              ARRAY[]::TEXT[] as tags, false as most_used, 0 as likes`;
+                              ARRAY[]::TEXT[] as tags, false as most_used, 0 as likes, false as popular`;
     }
     
     selectClause += `, cat.name as category_name, cat.slug as category_slug,
