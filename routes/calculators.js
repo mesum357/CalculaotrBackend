@@ -387,7 +387,11 @@ router.post('/', async (req, res) => {
     if (hasSubtitle) {
       insertColumns += `, subtitle`;
       insertValues += `, $${++paramCount}`;
-      params.push(subtitle || null);
+      // Process subtitle: trim and only set to null if empty/undefined
+      const processedSubtitle = subtitle && typeof subtitle === 'string' 
+        ? (subtitle.trim() || null) 
+        : (subtitle || null);
+      params.push(processedSubtitle);
     }
     
     if (hasNewColumns) {
@@ -536,7 +540,11 @@ router.put('/:id', async (req, res) => {
     if (hasSubtitle) {
       updateClause += `,
         subtitle = $${++paramCount}`;
-      params.push(subtitle || null);
+      // Process subtitle: trim and only set to null if empty/undefined
+      const processedSubtitle = subtitle && typeof subtitle === 'string' 
+        ? (subtitle.trim() || null) 
+        : (subtitle || null);
+      params.push(processedSubtitle);
     }
     
     if (hasNewColumns) {
