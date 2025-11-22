@@ -15,7 +15,8 @@
     "run-sessions-migration": "node scripts/run-sessions-migration.js",
     "run-popular-migration": "node scripts/run-popular-migration.js",
     "fix-session": "node database/fix_session_constraint.js",
-    "test-session": "node test-session.js"
+    "test-session": "node test-session.js",
+    "delete-biology-calculators-every-day": "node scripts/delete-biology-everyday-categories.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

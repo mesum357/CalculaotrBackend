@@ -177,6 +177,205 @@ router.post('/ratings/:calculatorId', async (req, res) => {
   }
 });
 
+// ========== USER FAVORITES ==========
+
+// Get all calculators liked by the current user (limited to 10 most recent)
+router.get('/user/favorites', async (req, res) => {
+  // Require authentication
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  try {
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      `SELECT 
+        calc.id,
+        calc.category_id,
+        calc.subcategory_id,
+        calc.name,
+        calc.slug,
+        calc.description,
+        calc.subtitle,
+        calc.href,
+        calc.is_active,
+        calc.inputs,
+        calc.results,
+        calc.tags,
+        calc.most_used,
+        calc.popular,
+        calc.likes,
+        calc.created_at,
+        calc.updated_at,
+        cat.name as category_name,
+        cat.slug as category_slug,
+        sub.name as subcategory_name,
+        sub.slug as subcategory_slug,
+        cl.created_at as liked_at
+      FROM calculator_likes cl
+      INNER JOIN calculators calc ON cl.calculator_id = calc.id
+      INNER JOIN categories cat ON calc.category_id = cat.id
+      LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
+      WHERE cl.user_id = $1 AND calc.is_active = true
+      ORDER BY cl.created_at DESC
+      LIMIT 10`,
+      [userId]
+    );
+
+    const calculators = result.rows.map(row => ({
+      id: row.id,
+      category_id: row.category_id,
+      subcategory_id: row.subcategory_id,
+      name: row.name,
+      slug: row.slug,
+      description: row.description,
+      subtitle: row.subtitle,
+      href: row.href,
+      is_active: row.is_active,
+      inputs: row.inputs,
+      results: row.results,
+      tags: row.tags,
+      most_used: row.most_used,
+      popular: row.popular,
+      likes: row.likes,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      category_name: row.category_name,
+      category_slug: row.category_slug,
+      subcategory_name: row.subcategory_name,
+      subcategory_slug: row.subcategory_slug,
+      liked_at: row.liked_at
+    }));
+
+    res.json(calculators);
+  } catch (error) {
+    console.error('Error fetching user favorites:', error);
+    res.status(500).json({ error: 'Failed to fetch favorites' });
+  }
+});
+
+// ========== CALCULATOR VIEWS ==========
+
+// Track a calculator view
+router.post('/views/:calculatorId', async (req, res) => {
+  // Require authentication
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  try {
+    const { calculatorId } = req.params;
+    const userId = req.user.id;
+
+    // Check if calculator exists
+    const calcCheck = await pool.query('SELECT id FROM calculators WHERE id = $1 AND is_active = true', [calculatorId]);
+    if (calcCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Calculator not found' });
+    }
+
+    // Insert view record
+    await pool.query(
+      'INSERT INTO calculator_views (calculator_id, user_id, viewed_at) VALUES ($1, $2, CURRENT_TIMESTAMP)',
+      [calculatorId, userId]
+    );
+
+    res.json({ message: 'View tracked' });
+  } catch (error) {
+    console.error('Error tracking view:', error);
+    // Silently fail - view tracking is not critical
+    res.status(200).json({ message: 'View tracking attempted' });
+  }
+});
+
+// Get recently viewed calculators for the current user (top 3)
+router.get('/user/recently-viewed', async (req, res) => {
+  // Require authentication
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  try {
+    const userId = req.user.id;
+
+    // Get all views, then process in JavaScript to get unique calculators with most recent view
+    const result = await pool.query(
+      `SELECT 
+        calc.id,
+        calc.category_id,
+        calc.subcategory_id,
+        calc.name,
+        calc.slug,
+        calc.description,
+        calc.subtitle,
+        calc.href,
+        calc.is_active,
+        calc.inputs,
+        calc.results,
+        calc.tags,
+        calc.most_used,
+        calc.popular,
+        calc.likes,
+        calc.created_at,
+        calc.updated_at,
+        cat.name as category_name,
+        cat.slug as category_slug,
+        sub.name as subcategory_name,
+        sub.slug as subcategory_slug,
+        cv.viewed_at
+      FROM calculator_views cv
+      INNER JOIN calculators calc ON cv.calculator_id = calc.id
+      INNER JOIN categories cat ON calc.category_id = cat.id
+      LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
+      WHERE cv.user_id = $1 AND calc.is_active = true
+      ORDER BY cv.viewed_at DESC`,
+      [userId]
+    );
+
+    // Get unique calculators with most recent view
+    const uniqueMap = new Map();
+    result.rows.forEach(row => {
+      if (!uniqueMap.has(row.id) || new Date(row.viewed_at) > new Date(uniqueMap.get(row.id).viewed_at)) {
+        uniqueMap.set(row.id, row);
+      }
+    });
+
+    // Sort by most recent viewed_at and take top 3
+    const calculators = Array.from(uniqueMap.values())
+      .sort((a, b) => new Date(b.viewed_at) - new Date(a.viewed_at))
+      .slice(0, 3)
+      .map(row => ({
+        id: row.id,
+        category_id: row.category_id,
+        subcategory_id: row.subcategory_id,
+        name: row.name,
+        slug: row.slug,
+        description: row.description,
+        subtitle: row.subtitle,
+        href: row.href,
+        is_active: row.is_active,
+        inputs: row.inputs,
+        results: row.results,
+        tags: row.tags,
+        most_used: row.most_used,
+        popular: row.popular,
+        likes: row.likes,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        category_name: row.category_name,
+        category_slug: row.category_slug,
+        subcategory_name: row.subcategory_name,
+        subcategory_slug: row.subcategory_slug,
+        viewed_at: row.viewed_at
+      }));
+
+    res.json(calculators);
+  } catch (error) {
+    console.error('Error fetching recently viewed calculators:', error);
+    res.status(500).json({ error: 'Failed to fetch recently viewed calculators' });
+  }
+});
+
 // ========== COMMENTS ==========
 
 // Get comments for a calculator
