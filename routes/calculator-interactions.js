@@ -204,39 +204,83 @@ router.get('/user/favorites', async (req, res) => {
       return res.json([]);
     }
 
-    const result = await pool.query(
-      `SELECT 
-        calc.id,
-        calc.category_id,
-        calc.subcategory_id,
-        calc.name,
-        calc.slug,
-        calc.description,
-        calc.subtitle,
-        calc.href,
-        calc.is_active,
-        calc.inputs,
-        calc.results,
-        calc.tags,
-        calc.most_used,
-        calc.popular,
-        calc.likes,
-        calc.created_at,
-        calc.updated_at,
-        cat.name as category_name,
-        cat.slug as category_slug,
-        sub.name as subcategory_name,
-        sub.slug as subcategory_slug,
-        cl.created_at as liked_at
-      FROM calculator_likes cl
-      INNER JOIN calculators calc ON cl.calculator_id = calc.id
-      INNER JOIN categories cat ON calc.category_id = cat.id
-      LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
-      WHERE cl.user_id = $1 AND calc.is_active = true
-      ORDER BY cl.created_at DESC
-      LIMIT 10`,
-      [userId]
-    );
+    // Check if subtitle column exists
+    let hasSubtitle = false;
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      hasSubtitle = true;
+    } catch (e) {
+      hasSubtitle = false;
+    }
+
+    // Build SELECT clause based on column existence
+    let selectClause = `SELECT 
+      calc.id,
+      calc.category_id,
+      calc.subcategory_id,
+      calc.name,
+      calc.slug,
+      calc.description,
+      ${hasSubtitle ? 'calc.subtitle,' : 'NULL as subtitle,'}
+      calc.href,
+      calc.is_active`;
+
+    // Check if new columns exist
+    let hasNewColumns = false;
+    try {
+      await pool.query('SELECT most_used FROM calculators LIMIT 1');
+      hasNewColumns = true;
+      selectClause += `,
+      calc.inputs,
+      calc.results,
+      calc.tags,
+      calc.most_used,
+      calc.likes`;
+    } catch (e) {
+      hasNewColumns = false;
+      selectClause += `,
+      '[]'::jsonb as inputs,
+      '[]'::jsonb as results,
+      ARRAY[]::TEXT[] as tags,
+      false as most_used,
+      0 as likes`;
+    }
+
+    // Check if popular column exists
+    let hasPopular = false;
+    if (hasNewColumns) {
+      try {
+        await pool.query('SELECT popular FROM calculators LIMIT 1');
+        hasPopular = true;
+        selectClause += `,
+      calc.popular`;
+      } catch (e) {
+        hasPopular = false;
+        selectClause += `,
+      false as popular`;
+      }
+    } else {
+      selectClause += `,
+      false as popular`;
+    }
+
+    selectClause += `,
+      calc.created_at,
+      calc.updated_at,
+      cat.name as category_name,
+      cat.slug as category_slug,
+      sub.name as subcategory_name,
+      sub.slug as subcategory_slug,
+      cl.created_at as liked_at
+    FROM calculator_likes cl
+    INNER JOIN calculators calc ON cl.calculator_id = calc.id
+    INNER JOIN categories cat ON calc.category_id = cat.id
+    LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
+    WHERE cl.user_id = $1 AND calc.is_active = true
+    ORDER BY cl.created_at DESC
+    LIMIT 10`;
+
+    const result = await pool.query(selectClause, [userId]);
 
     const calculators = result.rows.map(row => ({
       id: row.id,
@@ -344,39 +388,87 @@ router.get('/user/recently-viewed', async (req, res) => {
       return res.json([]);
     }
 
-    // Get all views, then process in JavaScript to get unique calculators with most recent view
-    const result = await pool.query(
-      `SELECT 
-        calc.id,
-        calc.category_id,
-        calc.subcategory_id,
-        calc.name,
-        calc.slug,
-        calc.description,
-        calc.subtitle,
-        calc.href,
-        calc.is_active,
-        calc.inputs,
-        calc.results,
-        calc.tags,
-        calc.most_used,
-        calc.popular,
-        calc.likes,
-        calc.created_at,
-        calc.updated_at,
-        cat.name as category_name,
-        cat.slug as category_slug,
-        sub.name as subcategory_name,
-        sub.slug as subcategory_slug,
-        cv.viewed_at
-      FROM calculator_views cv
-      INNER JOIN calculators calc ON cv.calculator_id = calc.id
-      INNER JOIN categories cat ON calc.category_id = cat.id
-      LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
-      WHERE cv.user_id = $1 AND calc.is_active = true
-      ORDER BY cv.viewed_at DESC`,
-      [userId]
-    );
+    // Check if subtitle column exists
+    let hasSubtitle = false;
+    try {
+      await pool.query('SELECT subtitle FROM calculators LIMIT 1');
+      hasSubtitle = true;
+    } catch (e) {
+      hasSubtitle = false;
+    }
+
+    // Check if new columns exist
+    let hasNewColumns = false;
+    try {
+      await pool.query('SELECT most_used FROM calculators LIMIT 1');
+      hasNewColumns = true;
+    } catch (e) {
+      hasNewColumns = false;
+    }
+
+    // Check if popular column exists
+    let hasPopular = false;
+    if (hasNewColumns) {
+      try {
+        await pool.query('SELECT popular FROM calculators LIMIT 1');
+        hasPopular = true;
+      } catch (e) {
+        hasPopular = false;
+      }
+    }
+
+    // Build SELECT clause based on column existence
+    let selectClause = `SELECT 
+      calc.id,
+      calc.category_id,
+      calc.subcategory_id,
+      calc.name,
+      calc.slug,
+      calc.description,
+      ${hasSubtitle ? 'calc.subtitle,' : 'NULL as subtitle,'}
+      calc.href,
+      calc.is_active`;
+
+    if (hasNewColumns) {
+      selectClause += `,
+      calc.inputs,
+      calc.results,
+      calc.tags,
+      calc.most_used,
+      calc.likes`;
+      if (hasPopular) {
+        selectClause += `,
+      calc.popular`;
+      } else {
+        selectClause += `,
+      false as popular`;
+      }
+    } else {
+      selectClause += `,
+      '[]'::jsonb as inputs,
+      '[]'::jsonb as results,
+      ARRAY[]::TEXT[] as tags,
+      false as most_used,
+      0 as likes,
+      false as popular`;
+    }
+
+    selectClause += `,
+      calc.created_at,
+      calc.updated_at,
+      cat.name as category_name,
+      cat.slug as category_slug,
+      sub.name as subcategory_name,
+      sub.slug as subcategory_slug,
+      cv.viewed_at
+    FROM calculator_views cv
+    INNER JOIN calculators calc ON cv.calculator_id = calc.id
+    INNER JOIN categories cat ON calc.category_id = cat.id
+    LEFT JOIN subcategories sub ON calc.subcategory_id = sub.id
+    WHERE cv.user_id = $1 AND calc.is_active = true
+    ORDER BY cv.viewed_at DESC`;
+
+    const result = await pool.query(selectClause, [userId]);
 
     // Get unique calculators with most recent view
     const uniqueMap = new Map();
