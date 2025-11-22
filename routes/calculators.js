@@ -467,6 +467,24 @@ router.put('/:id', async (req, res) => {
       popular
     } = req.body;
     
+    // Debug: Log subtitle value received
+    console.log('[Backend] ========== UPDATE CALCULATOR DEBUG ==========');
+    console.log('[Backend] Calculator ID:', id);
+    console.log('[Backend] Subtitle received:', {
+      raw: subtitle,
+      type: typeof subtitle,
+      isNull: subtitle === null,
+      isUndefined: subtitle === undefined,
+      isEmpty: subtitle === '',
+      trimmed: subtitle && typeof subtitle === 'string' ? subtitle.trim() : 'N/A',
+      hasValue: !!(subtitle && typeof subtitle === 'string' && subtitle.trim())
+    });
+    console.log('[Backend] Full request body:', {
+      ...req.body,
+      subtitle: req.body.subtitle,
+      subtitleType: typeof req.body.subtitle
+    });
+    
     // Parse and validate category_id and subcategory_id as integers (optional)
     let parsedCategoryId = null;
     let parsedSubcategoryId = null;
@@ -536,16 +554,32 @@ router.put('/:id', async (req, res) => {
     ];
     let paramCount = 7;
     
-    // Add subtitle if column exists
-    if (hasSubtitle) {
+    // Add subtitle if column exists OR if subtitle is provided (fallback)
+    // Always try to include subtitle if it's provided, even if check failed
+    if (hasSubtitle || (subtitle !== undefined && subtitle !== null)) {
       updateClause += `,
         subtitle = $${++paramCount}`;
       // Process subtitle: trim and only set to null if empty/undefined
       const processedSubtitle = subtitle && typeof subtitle === 'string' 
         ? (subtitle.trim() || null) 
         : (subtitle || null);
+      console.log('[Backend] Adding subtitle to UPDATE query:', {
+        hasSubtitleCheck: hasSubtitle,
+        paramIndex: paramCount,
+        raw: processedSubtitle,
+        type: typeof processedSubtitle,
+        isNull: processedSubtitle === null,
+        isUndefined: processedSubtitle === undefined,
+        originalSubtitle: subtitle,
+        originalType: typeof subtitle,
+      });
       params.push(processedSubtitle);
+    } else {
+      console.log('[Backend] WARNING: subtitle column check failed and no subtitle provided. Skipping subtitle update.');
     }
+    
+    console.log('[Backend] UPDATE query so far:', updateClause);
+    console.log('[Backend] Params count:', params.length);
     
     if (hasNewColumns) {
       updateClause += `,
@@ -572,11 +606,24 @@ router.put('/:id', async (req, res) => {
       WHERE id = $${++paramCount} RETURNING *`;
     params.push(id);
     
+    console.log('[Backend] Final UPDATE query:', updateClause);
+    console.log('[Backend] Final params:', params.map((p, i) => `$${i+1}=${typeof p === 'string' ? `"${p}"` : p}`).join(', '));
+    
     const result = await pool.query(updateClause, params);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Calculator not found' });
     }
+    
+    // Debug: Log what was saved
+    console.log('[Backend] Calculator updated, returned row:', {
+      id: result.rows[0].id,
+      name: result.rows[0].name,
+      subtitle: result.rows[0].subtitle,
+      subtitleType: typeof result.rows[0].subtitle,
+      subtitleIsNull: result.rows[0].subtitle === null,
+    });
+    console.log('[Backend] ======================================');
     
     // Save backup to JSON file (non-blocking)
     saveCalculatorsBackup()
