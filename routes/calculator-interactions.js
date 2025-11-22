@@ -189,6 +189,21 @@ router.get('/user/favorites', async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // Check if calculator_likes table exists
+    const tableCheck = await pool.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'calculator_likes'
+      )`
+    );
+
+    if (!tableCheck.rows[0].exists) {
+      // Table doesn't exist, return empty array
+      console.log('calculator_likes table does not exist, returning empty array');
+      return res.json([]);
+    }
+
     const result = await pool.query(
       `SELECT 
         calc.id,
@@ -251,7 +266,8 @@ router.get('/user/favorites', async (req, res) => {
     res.json(calculators);
   } catch (error) {
     console.error('Error fetching user favorites:', error);
-    res.status(500).json({ error: 'Failed to fetch favorites' });
+    // Return empty array instead of 500 error to prevent breaking the UI
+    res.json([]);
   }
 });
 
@@ -267,6 +283,21 @@ router.post('/views/:calculatorId', async (req, res) => {
   try {
     const { calculatorId } = req.params;
     const userId = req.user.id;
+
+    // Check if calculator_views table exists
+    const tableCheck = await pool.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'calculator_views'
+      )`
+    );
+
+    if (!tableCheck.rows[0].exists) {
+      // Table doesn't exist, silently return success
+      console.log('calculator_views table does not exist, skipping view tracking');
+      return res.json({ message: 'View tracking skipped (table not available)' });
+    }
 
     // Check if calculator exists
     const calcCheck = await pool.query('SELECT id FROM calculators WHERE id = $1 AND is_active = true', [calculatorId]);
@@ -297,6 +328,21 @@ router.get('/user/recently-viewed', async (req, res) => {
 
   try {
     const userId = req.user.id;
+
+    // Check if calculator_views table exists
+    const tableCheck = await pool.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'calculator_views'
+      )`
+    );
+
+    if (!tableCheck.rows[0].exists) {
+      // Table doesn't exist, return empty array
+      console.log('calculator_views table does not exist, returning empty array');
+      return res.json([]);
+    }
 
     // Get all views, then process in JavaScript to get unique calculators with most recent view
     const result = await pool.query(
@@ -372,7 +418,8 @@ router.get('/user/recently-viewed', async (req, res) => {
     res.json(calculators);
   } catch (error) {
     console.error('Error fetching recently viewed calculators:', error);
-    res.status(500).json({ error: 'Failed to fetch recently viewed calculators' });
+    // Return empty array instead of 500 error to prevent breaking the UI
+    res.json([]);
   }
 });
 
