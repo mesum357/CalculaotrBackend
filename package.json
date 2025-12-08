@@ -19,6 +19,7 @@
     "delete-biology-calculators-every-day": "node scripts/delete-biology-everyday-categories.js"
   },
   "dependencies": {
+    "@google-cloud/translate": "^8.0.0",
     "bcryptjs": "^3.0.3",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",

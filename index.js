@@ -17,6 +17,7 @@ const adminAuthRouter = require('./routes/admin-auth');
 const usersRouter = require('./routes/users');
 const backupRouter = require('./routes/backup');
 const migrationsRouter = require('./routes/migrations');
+const translationRouter = require('./routes/translation');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -277,6 +278,7 @@ app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/migrations', migrationsRouter);
+app.use('/api/translation', translationRouter);
 
 // Legacy endpoint for average percentage calculator (for backward compatibility)
 app.get('/api/calculators/average-percentage', async (req, res) => {
