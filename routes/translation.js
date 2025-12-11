@@ -21,7 +21,6 @@ try {
     translate = new Translate();
   }
 } catch (error) {
-  console.error('Error initializing Google Cloud Translation:', error);
 }
 
 // Language code mapping
@@ -65,21 +64,13 @@ router.post('/translate', async (req, res) => {
     const normalizedLang = targetLanguage.toLowerCase().trim();
     targetLangCode = LANGUAGE_CODES[normalizedLang];
     
-    // Debug logging
-    console.log('[Translation] Received targetLanguage:', targetLanguage);
-    console.log('[Translation] Normalized:', normalizedLang);
-    console.log('[Translation] Mapped code:', targetLangCode);
-    console.log('[Translation] Available mappings:', Object.keys(LANGUAGE_CODES));
-    
     // If not found in mapping, check if it's already a valid ISO code (2 letters)
     if (!targetLangCode) {
       // Check if it's already a valid 2-letter ISO code
       if (/^[a-z]{2}$/.test(normalizedLang)) {
         targetLangCode = normalizedLang;
-        console.log('[Translation] Using as-is (valid ISO code):', targetLangCode);
       } else {
         // Invalid language - return error
-        console.error('[Translation] Invalid language provided:', normalizedLang);
         return res.status(400).json({ 
           error: 'Invalid target language', 
           message: `Language "${targetLanguage}" is not supported. Please use one of: ${Object.keys(LANGUAGE_CODES).join(', ')}`,
@@ -90,11 +81,8 @@ router.post('/translate', async (req, res) => {
       }
     }
     
-    console.log('[Translation] Final language code to use:', targetLangCode);
-    
     // Validate language code format (must be 2-letter ISO code)
     if (!targetLangCode || !/^[a-z]{2}$/.test(targetLangCode)) {
-      console.error('[Translation] Invalid language code format:', targetLangCode);
       return res.status(400).json({ 
         error: 'Invalid language code format', 
         message: `Language code must be a 2-letter ISO 639-1 code. Received: "${targetLangCode}"`,
@@ -107,12 +95,6 @@ router.post('/translate', async (req, res) => {
     // Double-check: Ensure we're using the ISO code, not the language name
     // This is a safety check to prevent sending language names to Google's API
     if (targetLangCode.length > 2 || !/^[a-z]{2}$/i.test(targetLangCode)) {
-      console.error('[Translation] CRITICAL: Language code validation failed:', {
-        targetLangCode,
-        targetLanguage,
-        normalizedLang,
-        isInMapping: !!LANGUAGE_CODES[normalizedLang]
-      });
       return res.status(400).json({ 
         error: 'Language code validation failed', 
         message: `Invalid language code format. Expected 2-letter ISO code, got: "${targetLangCode}"`,
@@ -135,11 +117,6 @@ router.post('/translate', async (req, res) => {
       // CRITICAL: Verify the language code one more time before API call
       const finalLangCode = String(targetLangCode).toLowerCase().trim();
       if (finalLangCode.length !== 2 || !/^[a-z]{2}$/.test(finalLangCode)) {
-        console.error('[Translation] CRITICAL ERROR: Invalid language code before API call:', {
-          original: targetLangCode,
-          final: finalLangCode,
-          type: typeof targetLangCode
-        });
         return res.status(400).json({ 
           error: 'Invalid language code', 
           message: `Language code must be exactly 2 letters. Got: "${finalLangCode}"`,
@@ -148,18 +125,8 @@ router.post('/translate', async (req, res) => {
         });
       }
       
-      console.log('[Translation] Calling Google API with:', { 
-        textCount: validTexts.length, 
-        targetLangCode: finalLangCode, 
-        originalTargetLang: targetLangCode,
-        sampleText: validTexts[0]?.substring(0, 50) 
-      });
       const [translations] = await translate.translate(validTexts, finalLangCode);
       translationResult = Array.isArray(translations) ? translations : [translations];
-      console.log('[Translation] Google API response received:', { 
-        translationCount: translationResult.length,
-        sampleTranslation: translationResult[0]?.substring(0, 50)
-      });
       
       // Map back to original array structure (preserving empty slots)
       const result = [];
@@ -177,11 +144,6 @@ router.post('/translate', async (req, res) => {
       // CRITICAL: Verify the language code one more time before API call
       const finalLangCode = String(targetLangCode).toLowerCase().trim();
       if (finalLangCode.length !== 2 || !/^[a-z]{2}$/.test(finalLangCode)) {
-        console.error('[Translation] CRITICAL ERROR: Invalid language code before API call:', {
-          original: targetLangCode,
-          final: finalLangCode,
-          type: typeof targetLangCode
-        });
         return res.status(400).json({ 
           error: 'Invalid language code', 
           message: `Language code must be exactly 2 letters. Got: "${finalLangCode}"`,
@@ -190,18 +152,8 @@ router.post('/translate', async (req, res) => {
         });
       }
       
-      console.log('[Translation] Calling Google API with single text:', { 
-        targetLangCode: finalLangCode, 
-        originalTargetLang: targetLangCode,
-        textLength: text.length,
-        textPreview: text.substring(0, 50) 
-      });
       const [translation] = await translate.translate(text, finalLangCode);
       translationResult = translation;
-      console.log('[Translation] Google API response received:', { 
-        translationLength: translationResult.length,
-        translationPreview: translationResult.substring(0, 50)
-      });
     }
 
     res.json({ 
@@ -209,21 +161,6 @@ router.post('/translate', async (req, res) => {
       targetLanguage: targetLangCode 
     });
   } catch (error) {
-    console.error('Translation error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      targetLangCode: targetLangCode,
-      targetLanguage: req.body?.targetLanguage,
-      errorName: error.name,
-      errorCode: error.code
-    });
-    
-    // Log the full error object if available
-    if (error.response) {
-      console.error('Error response:', JSON.stringify(error.response.data, null, 2));
-    }
-    
     // Provide more detailed error information
     let errorMessage = error.message || 'Translation failed';
     let statusCode = 500;
@@ -234,14 +171,6 @@ router.post('/translate', async (req, res) => {
       if (apiError) {
         errorMessage = apiError.message || errorMessage;
         statusCode = apiError.code || 500;
-        
-        // Log detailed error for debugging
-        console.error('Google Translation API Error:', {
-          code: apiError.code,
-          message: apiError.message,
-          details: apiError.details,
-          fieldViolations: apiError.details?.[0]?.fieldViolations
-        });
         
         // Check for field violations (like invalid target language)
         if (apiError.details && Array.isArray(apiError.details)) {
