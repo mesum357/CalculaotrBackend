@@ -291,14 +291,34 @@ router.post('/logout', (req, res) => {
 });
 
 // Check session (get current user)
-router.get('/session', (req, res) => {
-  if (req.isAuthenticated()) {
+router.get('/session', async (req, res) => {
+  if (req.isAuthenticated() && req.user) {
+    // If name is missing from session, fetch fresh user data from database
+    let userName = req.user.name;
+    let userEmail = req.user.email;
+    
+    if (!userName || !userEmail) {
+      try {
+        const result = await pool.query(
+          'SELECT id, email, name FROM users WHERE id = $1',
+          [req.user.id]
+        );
+        
+        if (result.rows.length > 0) {
+          userName = result.rows[0].name || '';
+          userEmail = result.rows[0].email || '';
+        }
+      } catch (error) {
+        console.error('[Auth] Error fetching user data for session:', error);
+      }
+    }
+    
     res.json({ 
       authenticated: true,
       user: { 
         id: req.user.id, 
-        email: req.user.email, 
-        name: req.user.name 
+        email: userEmail || req.user.email || '',
+        name: userName || req.user.email?.split('@')[0] || 'User'
       }
     });
   } else {
