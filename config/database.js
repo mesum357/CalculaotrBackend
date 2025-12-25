@@ -1,20 +1,26 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'calculator_db',
-  password: process.env.DB_PASSWORD || 'password',
-  port: process.env.DB_PORT || 5432,
-  // Add connection timeout and retry logic
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000,
-  // SSL configuration for production (Render requires SSL)
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false
-  } : false,
-});
+// Support both DATABASE_URL (Render style) and individual env vars
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 30000,
+    }
+  : {
+      user: process.env.DB_USER || 'postgres',
+      host: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_NAME || 'calculator_db',
+      password: process.env.DB_PASSWORD || 'password',
+      port: process.env.DB_PORT || 5432,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 30000,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    };
+
+const pool = new Pool(poolConfig);
 
 // Test database connection on startup
 async function testConnection() {
