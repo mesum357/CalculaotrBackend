@@ -292,7 +292,10 @@ router.post('/', async (req, res) => {
       results,
       tags,
       most_used,
-      popular
+      popular,
+      meta_title,
+      meta_description,
+      meta_keywords
     } = req.body;
     
     // Name and slug are required, but category_id and subcategory_id are optional
@@ -411,6 +414,25 @@ router.post('/', async (req, res) => {
       }
     }
     
+    // Add meta tags columns
+    let hasMetaTags = false;
+    try {
+      await pool.query('SELECT meta_title FROM calculators LIMIT 1');
+      hasMetaTags = true;
+    } catch (e) {
+      hasMetaTags = false;
+    }
+    
+    if (hasMetaTags) {
+      insertColumns += `, meta_title, meta_description, meta_keywords`;
+      insertValues += `, $${++paramCount}, $${++paramCount}, $${++paramCount}`;
+      params.push(
+        meta_title || null,
+        meta_description || null,
+        meta_keywords || null
+      );
+    }
+    
     const result = await pool.query(
       `INSERT INTO calculators (${insertColumns}) VALUES (${insertValues}) RETURNING *`,
       params
@@ -464,7 +486,10 @@ router.put('/:id', async (req, res) => {
       results,
       tags,
       most_used,
-      popular
+      popular,
+      meta_title,
+      meta_description,
+      meta_keywords
     } = req.body;
     
     // Debug: Log subtitle value received
@@ -599,6 +624,27 @@ router.put('/:id', async (req, res) => {
         popular = $${++paramCount}`;
         params.push(popular || false);
       }
+    }
+    
+    // Add meta tags columns
+    let hasMetaTags = false;
+    try {
+      await pool.query('SELECT meta_title FROM calculators LIMIT 1');
+      hasMetaTags = true;
+    } catch (e) {
+      hasMetaTags = false;
+    }
+    
+    if (hasMetaTags) {
+      updateClause += `,
+        meta_title = $${++paramCount},
+        meta_description = $${++paramCount},
+        meta_keywords = $${++paramCount}`;
+      params.push(
+        meta_title || null,
+        meta_description || null,
+        meta_keywords || null
+      );
     }
     
     updateClause += `,

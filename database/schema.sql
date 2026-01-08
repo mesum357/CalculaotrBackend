@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS categories (
     slug VARCHAR(255) NOT NULL UNIQUE,
     icon VARCHAR(255),
     description TEXT,
+    meta_title VARCHAR(255),
+    meta_description TEXT,
+    meta_keywords TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -41,6 +44,9 @@ CREATE TABLE IF NOT EXISTS calculators (
     most_used BOOLEAN DEFAULT false,
     popular BOOLEAN DEFAULT false,
     likes INTEGER DEFAULT 0,
+    meta_title VARCHAR(255),
+    meta_description TEXT,
+    meta_keywords TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(category_id, subcategory_id, slug)

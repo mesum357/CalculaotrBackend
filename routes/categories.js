@@ -97,16 +97,33 @@ router.get('/slug/:slug', async (req, res) => {
 // Create a new category
 router.post('/', async (req, res) => {
   try {
-    const { name, slug, icon, description } = req.body;
+    const { name, slug, icon, description, meta_title, meta_description, meta_keywords } = req.body;
     
     if (!name || !slug) {
       return res.status(400).json({ error: 'Name and slug are required' });
     }
     
-    const result = await pool.query(
-      'INSERT INTO categories (name, slug, icon, description) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, slug, icon, description]
-    );
+    // Check if meta tags columns exist
+    let hasMetaTags = false;
+    try {
+      await pool.query('SELECT meta_title FROM categories LIMIT 1');
+      hasMetaTags = true;
+    } catch (e) {
+      hasMetaTags = false;
+    }
+    
+    let result;
+    if (hasMetaTags) {
+      result = await pool.query(
+        'INSERT INTO categories (name, slug, icon, description, meta_title, meta_description, meta_keywords) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [name, slug, icon, description, meta_title || null, meta_description || null, meta_keywords || null]
+      );
+    } else {
+      result = await pool.query(
+        'INSERT INTO categories (name, slug, icon, description) VALUES ($1, $2, $3, $4) RETURNING *',
+        [name, slug, icon, description]
+      );
+    }
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -122,12 +139,29 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, slug, icon, description } = req.body;
+    const { name, slug, icon, description, meta_title, meta_description, meta_keywords } = req.body;
     
-    const result = await pool.query(
-      'UPDATE categories SET name = $1, slug = $2, icon = $3, description = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
-      [name, slug, icon, description, id]
-    );
+    // Check if meta tags columns exist
+    let hasMetaTags = false;
+    try {
+      await pool.query('SELECT meta_title FROM categories LIMIT 1');
+      hasMetaTags = true;
+    } catch (e) {
+      hasMetaTags = false;
+    }
+    
+    let result;
+    if (hasMetaTags) {
+      result = await pool.query(
+        'UPDATE categories SET name = $1, slug = $2, icon = $3, description = $4, meta_title = $5, meta_description = $6, meta_keywords = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
+        [name, slug, icon, description, meta_title || null, meta_description || null, meta_keywords || null, id]
+      );
+    } else {
+      result = await pool.query(
+        'UPDATE categories SET name = $1, slug = $2, icon = $3, description = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
+        [name, slug, icon, description, id]
+      );
+    }
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Category not found' });
