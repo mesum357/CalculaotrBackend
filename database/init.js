@@ -28,6 +28,9 @@ async function initializeDatabase() {
     if (allTablesExist) {
       console.log('✓ Database tables already exist (categories, calculators, users, session, admins)');
       
+      // Check and add meta tags columns if they don't exist
+      await addMetaTagsColumns();
+      
       // Even if tables exist, check if categories are empty and seed them
       try {
         await seedDefaultCategories();
@@ -189,19 +192,22 @@ async function initializeDatabase() {
         await createAdminsTable(client);
       }
       
-      // Seed default categories and subcategories if database is empty
-      try {
-        await seedDefaultCategories();
-      } catch (seedError) {
-        console.warn('⚠️  Warning: Could not seed default categories:', seedError.message);
-        // Don't fail initialization if seeding fails
-      }
-      
-      return true;
-      
     } finally {
       client.release();
     }
+    
+    // After schema is initialized, ensure meta tags columns exist
+    await addMetaTagsColumns();
+    
+    // Seed default categories and subcategories if database is empty
+    try {
+      await seedDefaultCategories();
+    } catch (seedError) {
+      console.warn('⚠️  Warning: Could not seed default categories:', seedError.message);
+      // Don't fail initialization if seeding fails
+    }
+    
+    return true;
     
   } catch (error) {
     console.error('\n✗ Error initializing database:', error.message);
@@ -221,6 +227,64 @@ async function initializeDatabase() {
     
     console.error('\n⚠️  The server will continue to run, but API endpoints may fail.\n');
     return false;
+  }
+}
+
+/**
+ * Add meta tags columns to calculators and categories tables if they don't exist
+ * This ensures backward compatibility when upgrading existing databases
+ */
+async function addMetaTagsColumns() {
+  const client = await pool.connect();
+  
+  try {
+    console.log('   Checking meta tags columns...');
+    
+    // Check if meta_title column exists in calculators table
+    const calcMetaCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'calculators' 
+        AND column_name = 'meta_title'
+      );
+    `);
+    
+    if (!calcMetaCheck.rows[0].exists) {
+      console.log('   Adding meta tags columns to calculators table...');
+      await client.query('ALTER TABLE calculators ADD COLUMN IF NOT EXISTS meta_title VARCHAR(255)');
+      await client.query('ALTER TABLE calculators ADD COLUMN IF NOT EXISTS meta_description TEXT');
+      await client.query('ALTER TABLE calculators ADD COLUMN IF NOT EXISTS meta_keywords TEXT');
+      console.log('   ✓ Meta tags columns added to calculators table');
+    } else {
+      console.log('   ✓ Calculators table already has meta tags columns');
+    }
+    
+    // Check if meta_title column exists in categories table
+    const catMetaCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'categories' 
+        AND column_name = 'meta_title'
+      );
+    `);
+    
+    if (!catMetaCheck.rows[0].exists) {
+      console.log('   Adding meta tags columns to categories table...');
+      await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS meta_title VARCHAR(255)');
+      await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS meta_description TEXT');
+      await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS meta_keywords TEXT');
+      console.log('   ✓ Meta tags columns added to categories table');
+    } else {
+      console.log('   ✓ Categories table already has meta tags columns');
+    }
+    
+  } catch (error) {
+    console.warn('   ⚠️  Warning: Could not add meta tags columns:', error.message);
+    // Don't fail initialization if this fails
+  } finally {
+    client.release();
   }
 }
 
