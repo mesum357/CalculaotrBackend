@@ -31,6 +31,9 @@ async function initializeDatabase() {
       // Check and add meta tags columns if they don't exist
       await addMetaTagsColumns();
       
+      // Check and add radio modes columns if they don't exist
+      await addRadioModesColumns();
+      
       // Even if tables exist, check if categories are empty and seed them
       try {
         await seedDefaultCategories();
@@ -199,6 +202,9 @@ async function initializeDatabase() {
     // After schema is initialized, ensure meta tags columns exist
     await addMetaTagsColumns();
     
+    // After schema is initialized, ensure radio modes columns exist
+    await addRadioModesColumns();
+    
     // Seed default categories and subcategories if database is empty
     try {
       await seedDefaultCategories();
@@ -282,6 +288,43 @@ async function addMetaTagsColumns() {
     
   } catch (error) {
     console.warn('   ⚠️  Warning: Could not add meta tags columns:', error.message);
+    // Don't fail initialization if this fails
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Add radio modes columns to calculators table if they don't exist
+ * This enables calculators to have multiple calculation modes with radio options
+ */
+async function addRadioModesColumns() {
+  const client = await pool.connect();
+  
+  try {
+    console.log('   Checking radio modes columns...');
+    
+    // Check if has_radio_modes column exists in calculators table
+    const radioModesCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'calculators' 
+        AND column_name = 'has_radio_modes'
+      );
+    `);
+    
+    if (!radioModesCheck.rows[0].exists) {
+      console.log('   Adding radio modes columns to calculators table...');
+      await client.query('ALTER TABLE calculators ADD COLUMN IF NOT EXISTS has_radio_modes BOOLEAN DEFAULT FALSE');
+      await client.query('ALTER TABLE calculators ADD COLUMN IF NOT EXISTS radio_options JSONB DEFAULT NULL');
+      console.log('   ✓ Radio modes columns added to calculators table');
+    } else {
+      console.log('   ✓ Calculators table already has radio modes columns');
+    }
+    
+  } catch (error) {
+    console.warn('   ⚠️  Warning: Could not add radio modes columns:', error.message);
     // Don't fail initialization if this fails
   } finally {
     client.release();

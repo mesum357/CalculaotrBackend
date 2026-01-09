@@ -54,6 +54,16 @@ router.get('/', async (req, res) => {
                               ARRAY[]::TEXT[] as tags, false as most_used, 0 as likes, false as popular`;
     }
     
+    // Check if radio modes columns exist
+    let hasRadioModesColumn = false;
+    try {
+      await pool.query('SELECT has_radio_modes FROM calculators LIMIT 1');
+      hasRadioModesColumn = true;
+      selectClause += `, calc.has_radio_modes, calc.radio_options`;
+    } catch (e) {
+      selectClause += `, false as has_radio_modes, NULL as radio_options`;
+    }
+    
     selectClause += `, cat.name as category_name, cat.slug as category_slug,
                             sub.name as subcategory_name, sub.slug as subcategory_slug`;
     
@@ -192,6 +202,14 @@ router.get('/:id', async (req, res) => {
                               ARRAY[]::TEXT[] as tags, false as most_used, 0 as likes, false as popular`;
     }
     
+    // Check if radio modes columns exist
+    try {
+      await pool.query('SELECT has_radio_modes FROM calculators LIMIT 1');
+      selectClause += `, calc.has_radio_modes, calc.radio_options`;
+    } catch (e) {
+      selectClause += `, false as has_radio_modes, NULL as radio_options`;
+    }
+    
     selectClause += `, cat.name as category_name, cat.slug as category_slug,
                             sub.name as subcategory_name, sub.slug as subcategory_slug`;
     
@@ -295,7 +313,9 @@ router.post('/', async (req, res) => {
       popular,
       meta_title,
       meta_description,
-      meta_keywords
+      meta_keywords,
+      has_radio_modes,
+      radio_options
     } = req.body;
     
     // Name and slug are required, but category_id and subcategory_id are optional
@@ -433,6 +453,24 @@ router.post('/', async (req, res) => {
       );
     }
     
+    // Add radio modes columns
+    let hasRadioModesColumn = false;
+    try {
+      await pool.query('SELECT has_radio_modes FROM calculators LIMIT 1');
+      hasRadioModesColumn = true;
+    } catch (e) {
+      hasRadioModesColumn = false;
+    }
+    
+    if (hasRadioModesColumn) {
+      insertColumns += `, has_radio_modes, radio_options`;
+      insertValues += `, $${++paramCount}, $${++paramCount}`;
+      params.push(
+        has_radio_modes || false,
+        has_radio_modes ? JSON.stringify(radio_options || []) : null
+      );
+    }
+    
     const result = await pool.query(
       `INSERT INTO calculators (${insertColumns}) VALUES (${insertValues}) RETURNING *`,
       params
@@ -489,7 +527,9 @@ router.put('/:id', async (req, res) => {
       popular,
       meta_title,
       meta_description,
-      meta_keywords
+      meta_keywords,
+      has_radio_modes,
+      radio_options
     } = req.body;
     
     // Debug: Log subtitle value received
@@ -644,6 +684,25 @@ router.put('/:id', async (req, res) => {
         meta_title || null,
         meta_description || null,
         meta_keywords || null
+      );
+    }
+    
+    // Add radio modes columns
+    let hasRadioModesColumn = false;
+    try {
+      await pool.query('SELECT has_radio_modes FROM calculators LIMIT 1');
+      hasRadioModesColumn = true;
+    } catch (e) {
+      hasRadioModesColumn = false;
+    }
+    
+    if (hasRadioModesColumn) {
+      updateClause += `,
+        has_radio_modes = $${++paramCount},
+        radio_options = $${++paramCount}`;
+      params.push(
+        has_radio_modes || false,
+        has_radio_modes ? JSON.stringify(radio_options || []) : null
       );
     }
     
