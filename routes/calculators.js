@@ -7,7 +7,7 @@ const { saveCalculatorsBackup } = require('../utils/backup-calculators');
 router.get('/', async (req, res) => {
   try {
     const { category_id, subcategory_id, is_active, most_used, popular } = req.query;
-    
+
     // Check if new columns exist by trying to query them
     let hasNewColumns = false;
     let hasPopular = false;
@@ -24,12 +24,12 @@ router.get('/', async (req, res) => {
     } catch (e) {
       hasNewColumns = false;
     }
-    
+
     // Build SELECT clause - use explicit columns to avoid issues with missing columns
     let selectClause = `SELECT calc.id, calc.category_id, calc.subcategory_id, 
                                calc.name, calc.slug, calc.description, calc.href, 
                                calc.is_active, calc.created_at, calc.updated_at`;
-    
+
     // Check if subtitle column exists
     let hasSubtitle = false;
     try {
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
       hasSubtitle = false;
       selectClause += `, NULL as subtitle`;
     }
-    
+
     if (hasNewColumns) {
       selectClause += `, calc.inputs, calc.results, calc.tags, calc.most_used, calc.likes`;
       if (hasPopular) {
@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
       selectClause += `, '[]'::jsonb as inputs, '[]'::jsonb as results, 
                               ARRAY[]::TEXT[] as tags, false as most_used, 0 as likes, false as popular`;
     }
-    
+
     // Check if radio modes columns exist
     let hasRadioModesColumn = false;
     try {
@@ -63,10 +63,18 @@ router.get('/', async (req, res) => {
     } catch (e) {
       selectClause += `, false as has_radio_modes, NULL as radio_options`;
     }
-    
+
+    // Check if meta tags columns exist
+    try {
+      await pool.query('SELECT meta_title FROM calculators LIMIT 1');
+      selectClause += `, calc.meta_title, calc.meta_description, calc.meta_keywords`;
+    } catch (e) {
+      selectClause += `, NULL as meta_title, NULL as meta_description, NULL as meta_keywords`;
+    }
+
     selectClause += `, cat.name as category_name, cat.slug as category_slug,
                             sub.name as subcategory_name, sub.slug as subcategory_slug`;
-    
+
     let query = `${selectClause}
                  FROM calculators calc
                  LEFT JOIN categories cat ON calc.category_id = cat.id
@@ -74,7 +82,7 @@ router.get('/', async (req, res) => {
                  WHERE 1=1`;
     const params = [];
     let paramCount = 0;
-    
+
     if (category_id) {
       const parsedCategoryId = parseInt(category_id, 10);
       if (!isNaN(parsedCategoryId)) {
@@ -83,7 +91,7 @@ router.get('/', async (req, res) => {
         params.push(parsedCategoryId);
       }
     }
-    
+
     if (subcategory_id) {
       const parsedSubcategoryId = parseInt(subcategory_id, 10);
       if (!isNaN(parsedSubcategoryId)) {
@@ -92,13 +100,13 @@ router.get('/', async (req, res) => {
         params.push(parsedSubcategoryId);
       }
     }
-    
+
     if (is_active !== undefined) {
       paramCount++;
       query += ` AND calc.is_active = $${paramCount}`;
       params.push(is_active === 'true');
     }
-    
+
     if (most_used !== undefined && hasNewColumns) {
       paramCount++;
       query += ` AND calc.most_used = $${paramCount}`;
@@ -107,7 +115,7 @@ router.get('/', async (req, res) => {
       // If most_used column doesn't exist, return empty result when filtering by most_used
       query += ` AND 1=0`;
     }
-    
+
     if (popular !== undefined && hasPopular) {
       paramCount++;
       query += ` AND calc.popular = $${paramCount}`;
@@ -116,44 +124,44 @@ router.get('/', async (req, res) => {
       // If popular column doesn't exist, return empty result when filtering by popular
       query += ` AND 1=0`;
     }
-    
+
     query += ' ORDER BY calc.name ASC';
-    
+
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching calculators:', error);
     console.error('Error details:', error.message, error.code);
-    
+
     if (error.code === 'ECONNREFUSED') {
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: 'Database connection failed',
         message: 'Cannot connect to PostgreSQL database',
         hint: 'Make sure PostgreSQL is running. On Windows, start the PostgreSQL service from Services (services.msc)'
       });
     }
-    
+
     if (error.code === '28P01') {
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: 'Database authentication failed',
         message: 'Password authentication failed for user "postgres"',
         hint: 'Check your DB_PASSWORD in the .env file. It must match your PostgreSQL password. Create backend/.env with: DB_PASSWORD=your_password'
       });
     }
-    
+
     if (error.code === '3D000') {
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: 'Database does not exist',
         message: 'Database "calculator_db" does not exist',
         hint: 'Run: npm run setup-db (in the backend directory) to create the database and tables'
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Internal server error',
       message: error.message,
       code: error.code,
-      hint: error.code === '42P01' 
+      hint: error.code === '42P01'
         ? 'Database tables do not exist. Run: npm run setup-db'
         : 'Make sure you have run the database migration script to add the new columns (inputs, results, tags, most_used, likes). Run: psql -U postgres -d calculator_db -f backend/database/migration_add_calculator_fields.sql'
     });
@@ -172,11 +180,11 @@ router.get('/:id', async (req, res) => {
     } catch (e) {
       hasNewColumns = false;
     }
-    
+
     let selectClause = `SELECT calc.id, calc.category_id, calc.subcategory_id, 
                                calc.name, calc.slug, calc.description, calc.href, 
                                calc.is_active, calc.created_at, calc.updated_at`;
-    
+
     // Check if subtitle column exists
     try {
       await pool.query('SELECT subtitle FROM calculators LIMIT 1');
@@ -184,7 +192,7 @@ router.get('/:id', async (req, res) => {
     } catch (e) {
       selectClause += `, NULL as subtitle`;
     }
-    
+
     if (hasNewColumns) {
       selectClause += `, calc.inputs, calc.results, calc.tags, calc.most_used, calc.likes`;
       // Check if popular column exists
@@ -201,7 +209,7 @@ router.get('/:id', async (req, res) => {
       selectClause += `, '[]'::jsonb as inputs, '[]'::jsonb as results, 
                               ARRAY[]::TEXT[] as tags, false as most_used, 0 as likes, false as popular`;
     }
-    
+
     // Check if radio modes columns exist
     try {
       await pool.query('SELECT has_radio_modes FROM calculators LIMIT 1');
@@ -209,10 +217,18 @@ router.get('/:id', async (req, res) => {
     } catch (e) {
       selectClause += `, false as has_radio_modes, NULL as radio_options`;
     }
-    
+
+    // Check if meta tags columns exist
+    try {
+      await pool.query('SELECT meta_title FROM calculators LIMIT 1');
+      selectClause += `, calc.meta_title, calc.meta_description, calc.meta_keywords`;
+    } catch (e) {
+      selectClause += `, NULL as meta_title, NULL as meta_description, NULL as meta_keywords`;
+    }
+
     selectClause += `, cat.name as category_name, cat.slug as category_slug,
                             sub.name as subcategory_name, sub.slug as subcategory_slug`;
-    
+
     const result = await pool.query(
       `${selectClause}
        FROM calculators calc
@@ -221,16 +237,16 @@ router.get('/:id', async (req, res) => {
        WHERE calc.id = $1`,
       [id]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Calculator not found' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching calculator:', error);
     console.error('Error details:', error.message, error.code);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       message: error.message,
       code: error.code
@@ -243,7 +259,7 @@ router.get('/slug/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
     const { category_id, subcategory_id } = req.query;
-    
+
     // Check if subtitle column exists
     let hasSubtitle = false;
     try {
@@ -252,7 +268,7 @@ router.get('/slug/:slug', async (req, res) => {
     } catch (e) {
       hasSubtitle = false;
     }
-    
+
     let query = `SELECT calc.*, 
                         cat.name as category_name, cat.slug as category_slug,
                         sub.name as subcategory_name, sub.slug as subcategory_slug${hasSubtitle ? ', calc.subtitle' : ', NULL as subtitle'}
@@ -262,7 +278,7 @@ router.get('/slug/:slug', async (req, res) => {
                  WHERE calc.slug = $1`;
     const params = [slug];
     let paramCount = 1;
-    
+
     if (category_id) {
       const parsedCategoryId = parseInt(category_id, 10);
       if (!isNaN(parsedCategoryId)) {
@@ -271,7 +287,7 @@ router.get('/slug/:slug', async (req, res) => {
         params.push(parsedCategoryId);
       }
     }
-    
+
     if (subcategory_id) {
       const parsedSubcategoryId = parseInt(subcategory_id, 10);
       if (!isNaN(parsedSubcategoryId)) {
@@ -280,13 +296,13 @@ router.get('/slug/:slug', async (req, res) => {
         params.push(parsedSubcategoryId);
       }
     }
-    
+
     const result = await pool.query(query, params);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Calculator not found' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching calculator:', error);
@@ -297,14 +313,14 @@ router.get('/slug/:slug', async (req, res) => {
 // Create a new calculator
 router.post('/', async (req, res) => {
   try {
-    const { 
-      category_id, 
-      subcategory_id, 
-      name, 
-      slug, 
-      description, 
+    const {
+      category_id,
+      subcategory_id,
+      name,
+      slug,
+      description,
       subtitle,
-      href, 
+      href,
       is_active,
       inputs,
       results,
@@ -317,55 +333,55 @@ router.post('/', async (req, res) => {
       has_radio_modes,
       radio_options
     } = req.body;
-    
+
     // Name and slug are required, but category_id and subcategory_id are optional
     if (!name || !slug) {
       return res.status(400).json({ error: 'Name and slug are required' });
     }
-    
+
     // Parse and validate category_id and subcategory_id as integers (optional)
     let parsedCategoryId = null;
     let parsedSubcategoryId = null;
-    
+
     if (category_id !== null && category_id !== undefined && category_id !== '') {
       parsedCategoryId = parseInt(category_id, 10);
       if (isNaN(parsedCategoryId)) {
         return res.status(400).json({ error: 'Category ID must be a valid integer' });
       }
-      
+
       // Verify category exists
       const categoryCheck = await pool.query(
         'SELECT id FROM categories WHERE id = $1',
         [parsedCategoryId]
       );
-      
+
       if (categoryCheck.rows.length === 0) {
         return res.status(404).json({ error: 'Category not found' });
       }
     }
-    
+
     if (subcategory_id !== null && subcategory_id !== undefined && subcategory_id !== '') {
       parsedSubcategoryId = parseInt(subcategory_id, 10);
       if (isNaN(parsedSubcategoryId)) {
         return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
       }
-      
+
       // If subcategory is provided, category must also be provided
       if (!parsedCategoryId) {
         return res.status(400).json({ error: 'Category ID must be provided when subcategory ID is provided' });
       }
-      
+
       // Verify subcategory exists and belongs to category
       const subcategoryCheck = await pool.query(
         'SELECT id FROM subcategories WHERE id = $1 AND category_id = $2',
         [parsedSubcategoryId, parsedCategoryId]
       );
-      
+
       if (subcategoryCheck.rows.length === 0) {
         return res.status(404).json({ error: 'Subcategory not found or does not belong to the specified category' });
       }
     }
-    
+
     // Check if new columns exist
     let hasNewColumns = false;
     let hasPopular = false;
@@ -382,7 +398,7 @@ router.post('/', async (req, res) => {
     } catch (e) {
       hasNewColumns = false;
     }
-    
+
     // Check if subtitle column exists
     let hasSubtitle = false;
     try {
@@ -391,32 +407,32 @@ router.post('/', async (req, res) => {
     } catch (e) {
       hasSubtitle = false;
     }
-    
+
     // Build INSERT query dynamically based on available columns
     let insertColumns = `category_id, subcategory_id, name, slug, description, href, is_active`;
     let insertValues = `$1, $2, $3, $4, $5, $6, $7`;
     const params = [
-      parsedCategoryId, 
-      parsedSubcategoryId, 
-      name, 
-      slug, 
-      description || null, 
-      href || null, 
+      parsedCategoryId,
+      parsedSubcategoryId,
+      name,
+      slug,
+      description || null,
+      href || null,
       is_active !== undefined ? is_active : true
     ];
     let paramCount = 7;
-    
+
     // Add subtitle if column exists
     if (hasSubtitle) {
       insertColumns += `, subtitle`;
       insertValues += `, $${++paramCount}`;
       // Process subtitle: trim and only set to null if empty/undefined
-      const processedSubtitle = subtitle && typeof subtitle === 'string' 
-        ? (subtitle.trim() || null) 
+      const processedSubtitle = subtitle && typeof subtitle === 'string'
+        ? (subtitle.trim() || null)
         : (subtitle || null);
       params.push(processedSubtitle);
     }
-    
+
     if (hasNewColumns) {
       insertColumns += `, inputs, results, tags, most_used`;
       insertValues += `, $${++paramCount}, $${++paramCount}, $${++paramCount}, $${++paramCount}`;
@@ -426,14 +442,14 @@ router.post('/', async (req, res) => {
         tags || [],
         most_used || false
       );
-      
+
       if (hasPopular) {
         insertColumns += `, popular`;
         insertValues += `, $${++paramCount}`;
         params.push(popular || false);
       }
     }
-    
+
     // Add meta tags columns
     let hasMetaTags = false;
     try {
@@ -442,7 +458,7 @@ router.post('/', async (req, res) => {
     } catch (e) {
       hasMetaTags = false;
     }
-    
+
     if (hasMetaTags) {
       insertColumns += `, meta_title, meta_description, meta_keywords`;
       insertValues += `, $${++paramCount}, $${++paramCount}, $${++paramCount}`;
@@ -452,7 +468,7 @@ router.post('/', async (req, res) => {
         meta_keywords || null
       );
     }
-    
+
     // Add radio modes columns
     let hasRadioModesColumn = false;
     try {
@@ -461,7 +477,7 @@ router.post('/', async (req, res) => {
     } catch (e) {
       hasRadioModesColumn = false;
     }
-    
+
     if (hasRadioModesColumn) {
       insertColumns += `, has_radio_modes, radio_options`;
       insertValues += `, $${++paramCount}, $${++paramCount}`;
@@ -470,12 +486,12 @@ router.post('/', async (req, res) => {
         has_radio_modes ? JSON.stringify(radio_options || []) : null
       );
     }
-    
+
     const result = await pool.query(
       `INSERT INTO calculators (${insertColumns}) VALUES (${insertValues}) RETURNING *`,
       params
     );
-    
+
     // Save backup to JSON file (non-blocking)
     saveCalculatorsBackup()
       .then(result => {
@@ -489,14 +505,14 @@ router.post('/', async (req, res) => {
         console.error('✗ Failed to save backup after calculator creation:', err);
         console.error('Backup error stack:', err.stack);
       });
-    
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Calculator with this slug already exists in this category and subcategory' });
     }
     if (error.code === '42703') {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Database schema mismatch',
         message: error.message,
         hint: 'The database may have an old schema. Run the migration script: psql -U postgres -d calculator_db -f backend/database/migration_add_calculator_fields.sql'
@@ -511,14 +527,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      category_id, 
-      subcategory_id, 
-      name, 
-      slug, 
-      description, 
+    const {
+      category_id,
+      subcategory_id,
+      name,
+      slug,
+      description,
       subtitle,
-      href, 
+      href,
       is_active,
       inputs,
       results,
@@ -531,7 +547,7 @@ router.put('/:id', async (req, res) => {
       has_radio_modes,
       radio_options
     } = req.body;
-    
+
     // Debug: Log subtitle value received
     console.log('[Backend] ========== UPDATE CALCULATOR DEBUG ==========');
     console.log('[Backend] Calculator ID:', id);
@@ -549,30 +565,30 @@ router.put('/:id', async (req, res) => {
       subtitle: req.body.subtitle,
       subtitleType: typeof req.body.subtitle
     });
-    
+
     // Parse and validate category_id and subcategory_id as integers (optional)
     let parsedCategoryId = null;
     let parsedSubcategoryId = null;
-    
+
     if (category_id !== null && category_id !== undefined && category_id !== '') {
       parsedCategoryId = parseInt(category_id, 10);
       if (isNaN(parsedCategoryId)) {
         return res.status(400).json({ error: 'Category ID must be a valid integer' });
       }
     }
-    
+
     if (subcategory_id !== null && subcategory_id !== undefined && subcategory_id !== '') {
       parsedSubcategoryId = parseInt(subcategory_id, 10);
       if (isNaN(parsedSubcategoryId)) {
         return res.status(400).json({ error: 'Subcategory ID must be a valid integer' });
       }
-      
+
       // If subcategory is provided, category must also be provided
       if (!parsedCategoryId) {
         return res.status(400).json({ error: 'Category ID must be provided when subcategory ID is provided' });
       }
     }
-    
+
     // Check if new columns exist
     let hasNewColumns = false;
     let hasPopular = false;
@@ -589,7 +605,7 @@ router.put('/:id', async (req, res) => {
     } catch (e) {
       hasNewColumns = false;
     }
-    
+
     // Check if subtitle column exists
     let hasSubtitle = false;
     try {
@@ -598,7 +614,7 @@ router.put('/:id', async (req, res) => {
     } catch (e) {
       hasSubtitle = false;
     }
-    
+
     // Build UPDATE query dynamically based on available columns
     let updateClause = `UPDATE calculators SET 
         category_id = $1, 
@@ -609,24 +625,24 @@ router.put('/:id', async (req, res) => {
         href = $6, 
         is_active = $7`;
     const params = [
-      parsedCategoryId, 
-      parsedSubcategoryId, 
-      name, 
-      slug, 
-      description, 
-      href, 
+      parsedCategoryId,
+      parsedSubcategoryId,
+      name,
+      slug,
+      description,
+      href,
       is_active
     ];
     let paramCount = 7;
-    
+
     // Add subtitle if column exists OR if subtitle is provided (fallback)
     // Always try to include subtitle if it's provided, even if check failed
     if (hasSubtitle || (subtitle !== undefined && subtitle !== null)) {
       updateClause += `,
         subtitle = $${++paramCount}`;
       // Process subtitle: trim and only set to null if empty/undefined
-      const processedSubtitle = subtitle && typeof subtitle === 'string' 
-        ? (subtitle.trim() || null) 
+      const processedSubtitle = subtitle && typeof subtitle === 'string'
+        ? (subtitle.trim() || null)
         : (subtitle || null);
       console.log('[Backend] Adding subtitle to UPDATE query:', {
         hasSubtitleCheck: hasSubtitle,
@@ -642,10 +658,10 @@ router.put('/:id', async (req, res) => {
     } else {
       console.log('[Backend] WARNING: subtitle column check failed and no subtitle provided. Skipping subtitle update.');
     }
-    
+
     console.log('[Backend] UPDATE query so far:', updateClause);
     console.log('[Backend] Params count:', params.length);
-    
+
     if (hasNewColumns) {
       updateClause += `,
         inputs = $${++paramCount},
@@ -658,14 +674,14 @@ router.put('/:id', async (req, res) => {
         tags || [],
         most_used || false
       );
-      
+
       if (hasPopular) {
         updateClause += `,
         popular = $${++paramCount}`;
         params.push(popular || false);
       }
     }
-    
+
     // Add meta tags columns
     let hasMetaTags = false;
     try {
@@ -674,7 +690,7 @@ router.put('/:id', async (req, res) => {
     } catch (e) {
       hasMetaTags = false;
     }
-    
+
     if (hasMetaTags) {
       updateClause += `,
         meta_title = $${++paramCount},
@@ -686,7 +702,7 @@ router.put('/:id', async (req, res) => {
         meta_keywords || null
       );
     }
-    
+
     // Add radio modes columns
     let hasRadioModesColumn = false;
     try {
@@ -695,7 +711,7 @@ router.put('/:id', async (req, res) => {
     } catch (e) {
       hasRadioModesColumn = false;
     }
-    
+
     if (hasRadioModesColumn) {
       updateClause += `,
         has_radio_modes = $${++paramCount},
@@ -705,21 +721,21 @@ router.put('/:id', async (req, res) => {
         has_radio_modes ? JSON.stringify(radio_options || []) : null
       );
     }
-    
+
     updateClause += `,
         updated_at = CURRENT_TIMESTAMP 
       WHERE id = $${++paramCount} RETURNING *`;
     params.push(id);
-    
+
     console.log('[Backend] Final UPDATE query:', updateClause);
-    console.log('[Backend] Final params:', params.map((p, i) => `$${i+1}=${typeof p === 'string' ? `"${p}"` : p}`).join(', '));
-    
+    console.log('[Backend] Final params:', params.map((p, i) => `$${i + 1}=${typeof p === 'string' ? `"${p}"` : p}`).join(', '));
+
     const result = await pool.query(updateClause, params);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Calculator not found' });
     }
-    
+
     // Debug: Log what was saved
     console.log('[Backend] Calculator updated, returned row:', {
       id: result.rows[0].id,
@@ -729,7 +745,7 @@ router.put('/:id', async (req, res) => {
       subtitleIsNull: result.rows[0].subtitle === null,
     });
     console.log('[Backend] ======================================');
-    
+
     // Save backup to JSON file (non-blocking)
     saveCalculatorsBackup()
       .then(result => {
@@ -743,14 +759,14 @@ router.put('/:id', async (req, res) => {
         console.error('✗ Failed to save backup after calculator update:', err);
         console.error('Backup error stack:', err.stack);
       });
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Calculator with this slug already exists in this category and subcategory' });
     }
     if (error.code === '42703') {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Database schema mismatch',
         message: error.message,
         hint: 'The database may have an old schema. Run the migration script: psql -U postgres -d calculator_db -f backend/database/migration_add_calculator_fields.sql'
@@ -769,11 +785,11 @@ router.delete('/:id', async (req, res) => {
       'DELETE FROM calculators WHERE id = $1 RETURNING *',
       [id]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Calculator not found' });
     }
-    
+
     // Save backup to JSON file (non-blocking)
     saveCalculatorsBackup()
       .then(result => {
@@ -787,7 +803,7 @@ router.delete('/:id', async (req, res) => {
         console.error('✗ Failed to save backup after calculator deletion:', err);
         console.error('Backup error stack:', err.stack);
       });
-    
+
     res.json({ message: 'Calculator deleted successfully' });
   } catch (error) {
     console.error('Error deleting calculator:', error);
