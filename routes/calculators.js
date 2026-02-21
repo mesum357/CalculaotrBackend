@@ -64,6 +64,14 @@ router.get('/', async (req, res) => {
       selectClause += `, false as has_radio_modes, NULL as radio_options`;
     }
 
+    // Check if sub_calculators column exists
+    try {
+      await pool.query('SELECT sub_calculators FROM calculators LIMIT 1');
+      selectClause += `, calc.sub_calculators`;
+    } catch (e) {
+      selectClause += `, NULL as sub_calculators`;
+    }
+
     // Check if meta tags columns exist
     try {
       await pool.query('SELECT meta_title FROM calculators LIMIT 1');
@@ -218,6 +226,14 @@ router.get('/:id', async (req, res) => {
       selectClause += `, false as has_radio_modes, NULL as radio_options`;
     }
 
+    // Check if sub_calculators column exists
+    try {
+      await pool.query('SELECT sub_calculators FROM calculators LIMIT 1');
+      selectClause += `, calc.sub_calculators`;
+    } catch (e) {
+      selectClause += `, NULL as sub_calculators`;
+    }
+
     // Check if meta tags columns exist
     try {
       await pool.query('SELECT meta_title FROM calculators LIMIT 1');
@@ -331,7 +347,8 @@ router.post('/', async (req, res) => {
       meta_description,
       meta_keywords,
       has_radio_modes,
-      radio_options
+      radio_options,
+      sub_calculators
     } = req.body;
 
     // Name and slug are required, but category_id and subcategory_id are optional
@@ -487,6 +504,23 @@ router.post('/', async (req, res) => {
       );
     }
 
+    // Add sub_calculators column
+    let hasSubCalculatorsColumn = false;
+    try {
+      await pool.query('SELECT sub_calculators FROM calculators LIMIT 1');
+      hasSubCalculatorsColumn = true;
+    } catch (e) {
+      hasSubCalculatorsColumn = false;
+    }
+
+    if (hasSubCalculatorsColumn) {
+      insertColumns += `, sub_calculators`;
+      insertValues += `, $${++paramCount}`;
+      params.push(
+        sub_calculators && sub_calculators.length > 0 ? JSON.stringify(sub_calculators) : null
+      );
+    }
+
     const result = await pool.query(
       `INSERT INTO calculators (${insertColumns}) VALUES (${insertValues}) RETURNING *`,
       params
@@ -545,7 +579,8 @@ router.put('/:id', async (req, res) => {
       meta_description,
       meta_keywords,
       has_radio_modes,
-      radio_options
+      radio_options,
+      sub_calculators
     } = req.body;
 
     // Debug: Log subtitle value received
@@ -719,6 +754,23 @@ router.put('/:id', async (req, res) => {
       params.push(
         has_radio_modes || false,
         has_radio_modes ? JSON.stringify(radio_options || []) : null
+      );
+    }
+
+    // Add sub_calculators column
+    let hasSubCalculatorsColumn = false;
+    try {
+      await pool.query('SELECT sub_calculators FROM calculators LIMIT 1');
+      hasSubCalculatorsColumn = true;
+    } catch (e) {
+      hasSubCalculatorsColumn = false;
+    }
+
+    if (hasSubCalculatorsColumn) {
+      updateClause += `,
+        sub_calculators = $${++paramCount}`;
+      params.push(
+        sub_calculators && sub_calculators.length > 0 ? JSON.stringify(sub_calculators) : null
       );
     }
 
