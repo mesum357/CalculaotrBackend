@@ -5,33 +5,10 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/database');
 require('../config/passport-admin'); // Load admin passport strategy
 
-// Helper to prevent session regeneration
-function preventSessionRegeneration(req, res, next) {
-  const originalSessionId = req.sessionID;
 
-  const originalRegenerate = req.session.regenerate;
-  req.session.regenerate = function (callback) {
-    console.log('[Admin Auth] Session regeneration attempted but prevented');
-    if (callback) callback(null);
-  };
-
-  const originalLogin = req.login;
-  req.login = function (user, options, callback) {
-    if (typeof options === 'function') {
-      callback = options;
-      options = {};
-    }
-    options = options || {};
-    options.keepSessionInfo = true;
-
-    return originalLogin.call(this, user, options, callback);
-  };
-
-  next();
-}
 
 // Admin Login
-router.post('/login', preventSessionRegeneration, (req, res, next) => {
+router.post('/login', (req, res, next) => {
   // Trim whitespace from username
   if (req.body?.username) {
     req.body.username = req.body.username.trim();
@@ -39,86 +16,43 @@ router.post('/login', preventSessionRegeneration, (req, res, next) => {
 
   console.log('[Admin Auth] Login request received:', {
     username: req.body?.username,
-    hasPassword: !!req.body?.password,
     sessionId: req.sessionID,
     timestamp: new Date().toISOString()
   });
 
   passport.authenticate('admin-local', (err, admin, info) => {
     if (err) {
-      console.error('[Admin Auth] Authentication error:', {
-        error: err.message,
-        stack: err.stack,
-      });
       return res.status(500).json({ error: 'Authentication error', details: err.message });
     }
     if (!admin) {
-      console.log('[Admin Auth] Authentication failed:', {
-        info: info?.message,
-        username: req.body?.username
-      });
       return res.status(401).json({ error: info?.message || 'Invalid credentials' });
     }
 
-    console.log('[Admin Auth] Authentication successful, creating session for admin:', {
-      adminId: admin.id,
-      username: admin.username,
-      role: admin.role,
-      sessionId: req.sessionID,
-    });
-
-    // Store original session ID to prevent regeneration
-    const originalSessionId = req.sessionID;
-
-    // Manually serialize admin to session
-    req.session.passport = { user: { id: admin.id, type: 'admin' } };
-    req.session.adminId = admin.id;
-
-    // Save session first
-    req.session.save((saveErr) => {
-      if (saveErr) {
-        console.error('[Admin Auth] Failed to save session:', {
-          error: saveErr.message,
-          code: saveErr.code
-        });
-        return res.status(500).json({
-          error: 'Failed to save session',
-          details: saveErr.message
-        });
+    // Log the admin in
+    req.login(admin, (err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to create session', details: err.message });
       }
 
-      // Use req.login with keepSessionInfo
-      req.login(admin, { keepSessionInfo: true }, (err) => {
-        if (err) {
-          console.error('[Admin Auth] Failed to create session:', {
-            error: err.message,
-            stack: err.stack,
-            adminId: admin.id,
-          });
+      // Set session duration to 30 minutes for admins (rolling is enabled in index.js)
+      req.session.cookie.maxAge = 30 * 60 * 1000;
+      req.session.adminId = admin.id;
 
-          return res.status(500).json({
-            error: 'Failed to create session',
-            details: err.message
-          });
-        }
+      console.log('[Admin Auth] Login successful, session created:', {
+        adminId: admin.id,
+        sessionId: req.sessionID,
+        maxAge: req.session.cookie.maxAge
+      });
 
-        console.log('[Admin Auth] Session configured:', {
-          sessionId: req.sessionID,
-          adminId: admin.id,
+      return res.json({
+        message: 'Login successful',
+        admin: {
+          id: admin.id,
+          username: admin.username,
           role: admin.role,
-          isAuthenticated: req.isAuthenticated()
-        });
-
-        return res.json({
-          message: 'Login successful',
-          admin: {
-            id: admin.id,
-            username: admin.username,
-            role: admin.role,
-            permissions: admin.permissions || []
-          },
-          sessionId: req.sessionID
-        });
+          permissions: admin.permissions || []
+        },
+        sessionId: req.sessionID
       });
     });
   })(req, res, next);
@@ -142,7 +76,8 @@ router.post('/logout', (req, res) => {
 
 // Check session (get current admin)
 router.get('/session', (req, res) => {
-  if (req.isAuthenticated() && req.user && req.user.role) {
+  // ISOLATION: Only allow 'admin' type to be seen as authenticated on this endpoint
+  if (req.isAuthenticated() && req.user && req.user.type === 'admin') {
     res.json({
       authenticated: true,
       admin: {

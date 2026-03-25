@@ -73,6 +73,7 @@ passport.deserializeUser(async (serialized, done) => {
       
       if (result.rows.length > 0) {
         const admin = result.rows[0];
+        admin.type = 'admin'; // Attach type
         return done(null, admin);
       }
     } else if (type === 'user') {
@@ -84,6 +85,7 @@ passport.deserializeUser(async (serialized, done) => {
       
       if (result.rows.length > 0) {
         const user = result.rows[0];
+        user.type = 'user'; // Attach type
         return done(null, user);
       }
     } else {
@@ -95,6 +97,7 @@ passport.deserializeUser(async (serialized, done) => {
       
       if (adminResult.rows.length > 0) {
         const admin = adminResult.rows[0];
+        admin.type = 'admin';
         return done(null, admin);
       }
       
@@ -105,6 +108,7 @@ passport.deserializeUser(async (serialized, done) => {
       
       if (userResult.rows.length > 0) {
         const user = userResult.rows[0];
+        user.type = 'user';
         return done(null, user);
       }
     }
