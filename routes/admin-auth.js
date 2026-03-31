@@ -146,6 +146,15 @@ router.post('/change-password', async (req, res) => {
 // Create sub-admin (only for admin role)
 router.post('/create-sub-admin', async (req, res) => {
   try {
+    console.log('[Admin Auth] create-sub-admin guard check:', {
+      isAuthenticated: req.isAuthenticated(),
+      hasUser: !!req.user,
+      userRole: req.user?.role,
+      userType: req.user?.type,
+      userId: req.user?.id,
+      sessionId: req.sessionID,
+      hasCookie: !!req.headers.cookie,
+    });
     if (!req.isAuthenticated() || !req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only admin can create sub-admins' });
     }
@@ -213,6 +222,15 @@ router.post('/create-sub-admin', async (req, res) => {
 // Get all admins (only for admin role)
 router.get('/admins', async (req, res) => {
   try {
+    console.log('[Admin Auth] get-admins guard check:', {
+      isAuthenticated: req.isAuthenticated(),
+      hasUser: !!req.user,
+      userRole: req.user?.role,
+      userType: req.user?.type,
+      userId: req.user?.id,
+      sessionId: req.sessionID,
+      hasCookie: !!req.headers.cookie,
+    });
     if (!req.isAuthenticated() || !req.user || req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only admin can view all admins' });
     }

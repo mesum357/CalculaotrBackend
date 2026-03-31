@@ -22,6 +22,10 @@ const translationRouter = require('./routes/translation');
 const app = express();
 const port = process.env.PORT || 3001;
 
+// CRITICAL: Trust proxy for Render.com / cloud deployments
+// Without this, secure cookies won't work behind a reverse proxy
+app.set('trust proxy', 1);
+
 // CORS configuration - allow credentials for session cookies
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:9002',
@@ -86,41 +90,27 @@ app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Session debugging middleware (only in development or when DEBUG_SESSION is set)
-if (process.env.NODE_ENV !== 'production' || process.env.DEBUG_SESSION === 'true') {
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api/auth')) {
-      console.log('[Session Debug Request]', {
-        path: req.path,
-        method: req.method,
-        sessionId: req.sessionID,
-        hasSession: !!req.session,
-        isAuthenticated: req.isAuthenticated(),
-        userId: req.user?.id,
-        cookie: req.headers.cookie ? req.headers.cookie.substring(0, 50) + '...' : 'none',
-        origin: req.headers.origin,
-        referer: req.headers.referer
-      });
-    }
-    
-    // Log response headers after response is sent
-    const originalEnd = res.end;
-    res.end = function(...args) {
-      if (req.path.startsWith('/api/auth')) {
-        console.log('[Session Debug Response]', {
-          path: req.path,
-          method: req.method,
-          statusCode: res.statusCode,
-          setCookie: res.getHeader('Set-Cookie'),
-          headers: res.getHeaders()
-        });
-      }
-      originalEnd.apply(this, args);
-    };
-    
-    next();
-  });
-}
+// Session debugging middleware — always enabled for admin auth endpoints
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/admin/auth') || req.path.startsWith('/api/auth')) {
+    console.log('[Session Debug Request]', {
+      path: req.path,
+      method: req.method,
+      sessionId: req.sessionID,
+      hasSession: !!req.session,
+      isAuthenticated: req.isAuthenticated(),
+      userType: req.user?.type,
+      userRole: req.user?.role,
+      userId: req.user?.id,
+      cookie: req.headers.cookie ? req.headers.cookie.substring(0, 80) + '...' : 'none',
+      origin: req.headers.origin,
+      secure: req.secure,
+      protocol: req.protocol,
+      trustProxy: app.get('trust proxy'),
+    });
+  }
+  next();
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
